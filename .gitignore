@@ -1,0 +1,19 @@
+node_modules/
+dist/
+.npm-cache/
+artifacts/
+.test-state/
+profiles/
+.env
+secrets/
+.env.*
+!.env.example
+
+# Instance configuration and private local files
+compose.yaml
+auth.json
+*.key
+*.pem
+*.log
+*.tar
+*.tgz

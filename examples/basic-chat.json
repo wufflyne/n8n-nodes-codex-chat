@@ -1,0 +1,75 @@
+{
+  "name": "Codex Wire — Basic Chat",
+  "active": false,
+  "nodes": [
+    {
+      "id": "trigger",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "agent",
+      "name": "AI Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3,
+      "position": [
+        350,
+        0
+      ],
+      "parameters": {
+        "promptType": "define",
+        "text": "Reply with one exact fact: how many meters are in one kilometer?",
+        "options": {}
+      }
+    },
+    {
+      "id": "model",
+      "name": "Codex Chat Model",
+      "type": "n8n-nodes-codex-chat.codexChatModel",
+      "typeVersion": 1,
+      "position": [
+        250,
+        200
+      ],
+      "parameters": {
+        "model": {
+          "mode": "id",
+          "value": "SELECT_FROM_YOUR_ACCOUNT_CATALOG"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Codex Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

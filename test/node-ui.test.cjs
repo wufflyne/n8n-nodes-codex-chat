@@ -1,0 +1,30 @@
+const {test}=require('node:test');
+const assert=require('node:assert/strict');
+const fs=require('node:fs/promises');
+const path=require('node:path');
+const {randomUUID}=require('node:crypto');
+const {ProfileStore}=require('../dist');
+const {profile,rawModel}=require('./helpers.cjs');
+
+test('Native model picker, all capability loaders and credential lifecycle tests use the selected isolated profile',async t=>{
+ await fs.mkdir('.test-state',{recursive:true,mode:0o700});const dir=await fs.mkdtemp(path.resolve('.test-state/ui-'));
+ const prior={dir:process.env.N8N_CODEX_STORE_DIR,key:process.env.N8N_CODEX_STORE_KEY,fetch:global.fetch};
+ t.after(async()=>{global.fetch=prior.fetch;for(const [k,v]of [['N8N_CODEX_STORE_DIR',prior.dir],['N8N_CODEX_STORE_KEY',prior.key]])if(v===undefined)delete process.env[k];else process.env[k]=v;await fs.rm(dir,{recursive:true,force:true});});
+ process.env.N8N_CODEX_STORE_DIR=dir;process.env.N8N_CODEX_STORE_KEY=Buffer.alloc(32,0x75).toString('base64');
+ const binding={profileId:randomUUID(),bindingSecret:'SYNTHETIC_UI_BINDING'};const store=new ProfileStore(dir,Buffer.alloc(32,0x75));await store.write(profile(binding));
+ let requests=0;global.fetch=async()=>{requests++;return Response.json({models:[rawModel()]});};
+ const {CodexChatModel:Node}=require('../dist/nodes/CodexChatModel/CodexChatModel.node');const node=new Node();
+ const ctx={getCredentials:async()=>binding,getNodeParameter:()=>({value:'synthetic-model'})};
+ const models=await node.methods.listSearch.searchModels.call(ctx,'SYNTHETIC');assert.equal(models.results[0].value,'synthetic-model');
+ assert.equal((await node.methods.listSearch.searchModels.call(ctx,'missing')).results.length,0);
+ assert.deepEqual((await node.methods.loadOptions.reasoningEfforts.call(ctx)).map(o=>o.value),['','low','high']);
+ assert.equal((await node.methods.loadOptions.reasoningSummaries.call(ctx)).length,4);
+ assert.deepEqual((await node.methods.loadOptions.serviceTiers.call(ctx)).map(o=>o.value),['','priority']);
+ assert.equal((await node.methods.loadOptions.verbosityLevels.call(ctx)).length,4);assert.equal(requests,1);
+ const check=data=>node.methods.credentialTest.testProfileBinding.call({}, {data});
+ assert.equal((await check(binding)).status,'OK');
+ assert.equal((await check({...binding,bindingSecret:'SYNTHETIC_WRONG'})).status,'Error');
+ await store.write({...await store.read(binding),state:'reconnect'});assert.equal((await check(binding)).status,'Error');
+ await store.write({...await store.read(binding),state:'ready',tokens:{...profile(binding).tokens,refreshToken:undefined,expiresAt:0}});assert.equal((await check(binding)).status,'Error');
+ await assert.rejects(node.supplyData.call({getCredentials:async()=>{throw Error('SYNTHETIC_SECRET');},getNode:()=>({name:'Synthetic model'})},0),error=>!error.message.includes('SYNTHETIC_SECRET'));
+});

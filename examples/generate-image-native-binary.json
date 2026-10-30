@@ -1,0 +1,172 @@
+{
+  "name": "Codex Wire — Generate Image to Native Binary HTTP Output",
+  "active": false,
+  "nodes": [
+    {
+      "id": "webhook",
+      "name": "Image Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "codex-wire-image",
+        "responseMode": "responseNode"
+      }
+    },
+    {
+      "id": "image",
+      "name": "Codex Image",
+      "type": "n8n-nodes-codex-chat.codexImage",
+      "typeVersion": 1,
+      "position": [
+        250,
+        0
+      ],
+      "parameters": {
+        "operation": "generateImage",
+        "prompt": "A small mint connector icon on a dark square, original geometric design.",
+        "transparentBackground": false,
+        "binaryProperty": "data"
+      }
+    },
+    {
+      "id": "respond",
+      "name": "Respond with Native Image",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        500,
+        0
+      ],
+      "parameters": {
+        "respondWith": "binary",
+        "responseDataSource": "set",
+        "inputFieldName": "data",
+        "options": {}
+      }
+    },
+    {
+      "id": "manual",
+      "name": "Manual Image Tool Demo",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        400
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "agent",
+      "name": "Image Metadata Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3,
+      "position": [
+        400,
+        400
+      ],
+      "parameters": {
+        "promptType": "define",
+        "text": "Use generate_image once and report its MIME type, width and height. The binary is delivered separately through the main HTTP example.",
+        "options": {
+          "maxIterations": 3
+        }
+      }
+    },
+    {
+      "id": "model",
+      "name": "Codex Chat Model",
+      "type": "n8n-nodes-codex-chat.codexChatModel",
+      "typeVersion": 1,
+      "position": [
+        250,
+        650
+      ],
+      "parameters": {
+        "model": {
+          "mode": "id",
+          "value": "SELECT_FROM_YOUR_ACCOUNT_CATALOG"
+        }
+      }
+    },
+    {
+      "id": "tool",
+      "name": "generate_image",
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2.2,
+      "position": [
+        600,
+        650
+      ],
+      "parameters": {
+        "description": "Generate one original geometric icon and return controlled image metadata only. This tool does not return a chat attachment or download URL.",
+        "source": "parameter",
+        "workflowJson": "{\"name\":\"Codex Wire Image Tool Subworkflow\",\"nodes\":[{\"id\":\"start\",\"name\":\"When Executed by Another Workflow\",\"type\":\"n8n-nodes-base.executeWorkflowTrigger\",\"typeVersion\":1.1,\"position\":[0,0],\"parameters\":{\"inputSource\":\"passthrough\"}},{\"id\":\"image\",\"name\":\"Codex Image\",\"type\":\"n8n-nodes-codex-chat.codexImage\",\"typeVersion\":1,\"position\":[250,0],\"parameters\":{\"operation\":\"generateImage\",\"prompt\":\"A small mint connector icon on a dark square, original geometric design.\",\"transparentBackground\":false,\"binaryProperty\":\"data\"}},{\"id\":\"metadata\",\"name\":\"Return Image Metadata\",\"type\":\"n8n-nodes-base.code\",\"typeVersion\":2,\"position\":[500,0],\"parameters\":{\"jsCode\":\"return $input.all().map(item => ({json:item.json}));\"}}],\"connections\":{\"When Executed by Another Workflow\":{\"main\":[[{\"node\":\"Codex Image\",\"type\":\"main\",\"index\":0}]]},\"Codex Image\":{\"main\":[[{\"node\":\"Return Image Metadata\",\"type\":\"main\",\"index\":0}]]}},\"settings\":{\"executionOrder\":\"v1\"}}"
+      }
+    }
+  ],
+  "connections": {
+    "Image Webhook": {
+      "main": [
+        [
+          {
+            "node": "Codex Image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Codex Image": {
+      "main": [
+        [
+          {
+            "node": "Respond with Native Image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Image Tool Demo": {
+      "main": [
+        [
+          {
+            "node": "Image Metadata Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Codex Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Image Metadata Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "generate_image": {
+      "ai_tool": [
+        [
+          {
+            "node": "Image Metadata Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

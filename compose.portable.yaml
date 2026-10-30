@@ -1,0 +1,31 @@
+name: codex-wire-n8n
+services:
+  n8n:
+    image: codex-wire-v0-0-4-n8n:0.0.4
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5678:5678"
+    env_file:
+      - ./secrets/runtime.env
+    environment:
+      N8N_CODEX_STORE_DIR: /var/lib/n8n-codex/profiles
+      N8N_DIAGNOSTICS_ENABLED: "false"
+      N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS: "true"
+    volumes:
+      - n8n-state:/home/node/.n8n
+      - codex-profiles:/var/lib/n8n-codex
+    healthcheck:
+      test:
+        [
+          CMD,
+          node,
+          -e,
+          "fetch('http://127.0.0.1:5678/healthz/readiness').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+volumes:
+  n8n-state:
+  codex-profiles:

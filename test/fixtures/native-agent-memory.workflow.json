@@ -1,0 +1,250 @@
+{
+  "id": "syntheticCodexMemory",
+  "name": "Synthetic Codex Native Memory Contract",
+  "active": false,
+  "nodes": [
+    {
+      "id": "trigger",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "agent",
+      "name": "Native AI Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3,
+      "position": [
+        240,
+        0
+      ],
+      "parameters": {
+        "promptType": "define",
+        "text": "Call native_add_one with value 2 and native_double with value 3. Return both results.",
+        "options": {
+          "maxIterations": 5
+        },
+        "hasOutputParser": true
+      }
+    },
+    {
+      "id": "model",
+      "name": "Codex Chat Model",
+      "type": "CUSTOM.codexChatModel",
+      "typeVersion": 1,
+      "position": [
+        160,
+        220
+      ],
+      "parameters": {
+        "model": {
+          "mode": "id",
+          "value": "synthetic-model"
+        },
+        "reliability": {
+          "maxRetries": 0
+        }
+      },
+      "credentials": {
+        "codexAccount": {
+          "id": "syntheticCodexBinding",
+          "name": "Synthetic Codex Profile"
+        }
+      }
+    },
+    {
+      "id": "tool1",
+      "name": "native_add_one",
+      "type": "@n8n/n8n-nodes-langchain.toolCode",
+      "typeVersion": 1.3,
+      "position": [
+        340,
+        220
+      ],
+      "parameters": {
+        "name": "native_add_one",
+        "description": "Add one to a numeric value.",
+        "specifyInputSchema": true,
+        "schemaType": "manual",
+        "inputSchema": "{\"type\":\"object\",\"properties\":{\"value\":{\"type\":\"number\"}},\"required\":[\"value\"]}",
+        "jsCode": "return String(query.value + 1);"
+      }
+    },
+    {
+      "id": "tool2",
+      "name": "native_double",
+      "type": "@n8n/n8n-nodes-langchain.toolCode",
+      "typeVersion": 1.3,
+      "position": [
+        520,
+        220
+      ],
+      "parameters": {
+        "name": "native_double",
+        "description": "Double a numeric value.",
+        "specifyInputSchema": true,
+        "schemaType": "manual",
+        "inputSchema": "{\"type\":\"object\",\"properties\":{\"value\":{\"type\":\"number\"}},\"required\":[\"value\"]}",
+        "jsCode": "return String(query.value * 2);"
+      }
+    },
+    {
+      "id": "parser",
+      "name": "Structured Output Parser",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        700,
+        220
+      ],
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\"type\": \"object\", \"properties\": {\"answer\": {\"type\": \"string\"}}, \"required\": [\"answer\"], \"additionalProperties\": false}"
+      }
+    },
+    {
+      "id": "agent2",
+      "name": "Native Memory Follow-up",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3,
+      "position": [
+        900,
+        0
+      ],
+      "parameters": {
+        "promptType": "define",
+        "text": "Continue using the complete previous native tool history.",
+        "options": {
+          "maxIterations": 5
+        },
+        "hasOutputParser": true
+      }
+    },
+    {
+      "id": "memory",
+      "name": "Simple Memory",
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.1,
+      "position": [
+        900,
+        400
+      ],
+      "parameters": {
+        "sessionKey": "synthetic-account-workflow-conversation",
+        "contextWindowLength": 20
+      }
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Native AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Codex Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Native AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          },
+          {
+            "node": "Native Memory Follow-up",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "native_add_one": {
+      "ai_tool": [
+        [
+          {
+            "node": "Native AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          },
+          {
+            "node": "Native Memory Follow-up",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "native_double": {
+      "ai_tool": [
+        [
+          {
+            "node": "Native AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          },
+          {
+            "node": "Native Memory Follow-up",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Native AI Agent",
+            "type": "ai_outputParser",
+            "index": 0
+          },
+          {
+            "node": "Native Memory Follow-up",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Native AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Native Memory Follow-up",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Simple Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "Native AI Agent",
+            "type": "ai_memory",
+            "index": 0
+          },
+          {
+            "node": "Native Memory Follow-up",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

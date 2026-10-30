@@ -1,0 +1,16 @@
+FROM docker.io/n8nio/n8n:2.45.6@sha256:45edf89655fd66dd55ea9336c1791ad14777599fdbf6c5aec6db583ede99a40b
+USER root
+WORKDIR /build
+RUN chown node:node /build
+USER node
+ENV npm_config_cache=/build/.npm-cache
+COPY --chown=node:node package.json package-lock.json ./
+RUN npm ci --include=dev --ignore-scripts --no-audit --no-fund
+COPY --chown=node:node tsconfig.json ./
+COPY --chown=node:node src ./src
+COPY --chown=node:node scripts ./scripts
+COPY --chown=node:node test ./test
+COPY --chown=node:node README.md LICENSE compatibility.json ./
+COPY --chown=node:node docs ./docs
+COPY --chown=node:node examples ./examples
+RUN mkdir artifacts && npm run pack:local

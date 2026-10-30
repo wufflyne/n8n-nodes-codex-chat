@@ -1,0 +1,21 @@
+# Supply the builder produced from this release; never silently reuse an older package.
+ARG BUILD_IMAGE
+FROM ${BUILD_IMAGE} AS package
+FROM docker.io/n8nio/n8n:2.45.6@sha256:45edf89655fd66dd55ea9336c1791ad14777599fdbf6c5aec6db583ede99a40b AS dependencies
+USER root
+WORKDIR /opt/n8n-codex
+ENV npm_config_cache=/opt/n8n-codex/.npm-cache
+COPY --from=package /build/artifacts/*.tgz /tmp/package.tgz
+RUN npm install --prefix /opt/n8n-codex --omit=dev --legacy-peer-deps --ignore-scripts --no-audit --no-fund /tmp/package.tgz
+COPY scripts/link-runtime.cjs ./link-runtime.cjs
+RUN node link-runtime.cjs
+# Exclude upstream dependency test fixtures before the clean runtime COPY.
+RUN rm -rf node_modules/fast-uri/test node_modules/fast-uri/types/index.test-d.ts node_modules/fast-uri/benchmark node_modules/json-schema-traverse/spec
+FROM docker.io/n8nio/n8n:2.45.6@sha256:45edf89655fd66dd55ea9336c1791ad14777599fdbf6c5aec6db583ede99a40b
+USER root
+WORKDIR /opt/n8n-codex
+COPY --from=dependencies /opt/n8n-codex/node_modules ./node_modules
+ENV N8N_CUSTOM_EXTENSIONS=/opt/n8n-codex/node_modules/n8n-nodes-codex-chat/dist
+RUN mkdir -p /var/lib/n8n-codex/profiles /var/lib/n8n-codex/bindings && chown -R node:node /var/lib/n8n-codex && chmod 0700 /var/lib/n8n-codex /var/lib/n8n-codex/profiles /var/lib/n8n-codex/bindings
+USER node
+WORKDIR /home/node

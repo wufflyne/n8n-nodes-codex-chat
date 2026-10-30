@@ -1,0 +1,303 @@
+{
+  "name": "Codex Wire — Account Selection with Simple Memory",
+  "active": false,
+  "nodes": [
+    {
+      "id": "trigger",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "limits-a",
+      "name": "Limits A",
+      "type": "n8n-nodes-codex-chat.codexAccountTools",
+      "typeVersion": 1,
+      "position": [
+        200,
+        -100
+      ],
+      "parameters": {
+        "operation": "getLimits"
+      }
+    },
+    {
+      "id": "limits-b",
+      "name": "Limits B",
+      "type": "n8n-nodes-codex-chat.codexAccountTools",
+      "typeVersion": 1,
+      "position": [
+        200,
+        100
+      ],
+      "parameters": {
+        "operation": "getLimits"
+      }
+    },
+    {
+      "id": "merge",
+      "name": "Wait for Both Accounts",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        400,
+        0
+      ],
+      "parameters": {
+        "mode": "append"
+      }
+    },
+    {
+      "id": "select",
+      "name": "Select One Account",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        600,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const a=$('Limits A').first().json, b=$('Limits B').first().json; const selectedAccount=a.routing.decision==='allowed'?'a':b.routing.decision==='allowed'?'b':null; if(!selectedAccount) throw Error('No explicitly allowed account. Unknown limits stop this example.'); return [{json:{selectedAccount,reason:'explicit_permission',conversationId:'example-conversation',firstItemOnly:true}}];"
+      }
+    },
+    {
+      "id": "selector",
+      "name": "Model Selector",
+      "type": "@n8n/n8n-nodes-langchain.modelSelector",
+      "typeVersion": 1,
+      "position": [
+        800,
+        200
+      ],
+      "parameters": {
+        "numberInputs": 2,
+        "rules": {
+          "rule": [
+            {
+              "modelIndex": 1,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "select-a",
+                    "leftValue": "={{ $json.selectedAccount }}",
+                    "rightValue": "a",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "modelIndex": 2,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "select-b",
+                    "leftValue": "={{ $json.selectedAccount }}",
+                    "rightValue": "b",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "model-a",
+      "name": "Model A",
+      "type": "n8n-nodes-codex-chat.codexChatModel",
+      "typeVersion": 1,
+      "position": [
+        650,
+        400
+      ],
+      "parameters": {
+        "model": {
+          "mode": "id",
+          "value": "SELECT_FROM_YOUR_ACCOUNT_CATALOG"
+        }
+      }
+    },
+    {
+      "id": "model-b",
+      "name": "Model B",
+      "type": "n8n-nodes-codex-chat.codexChatModel",
+      "typeVersion": 1,
+      "position": [
+        900,
+        400
+      ],
+      "parameters": {
+        "model": {
+          "mode": "id",
+          "value": "SELECT_FROM_YOUR_ACCOUNT_CATALOG"
+        }
+      }
+    },
+    {
+      "id": "memory",
+      "name": "Account Scoped Simple Memory",
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        1100,
+        240
+      ],
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $workflow.id + ':' + $json.selectedAccount + ':' + $json.conversationId }}",
+        "contextWindowLength": 10
+      }
+    },
+    {
+      "id": "agent",
+      "name": "AI Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3,
+      "position": [
+        1000,
+        0
+      ],
+      "parameters": {
+        "promptType": "define",
+        "text": "Remember this conversation’s selected account alias and answer with a useful exact fact.",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Limits A",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Limits B",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Limits A": {
+      "main": [
+        [
+          {
+            "node": "Wait for Both Accounts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Limits B": {
+      "main": [
+        [
+          {
+            "node": "Wait for Both Accounts",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Wait for Both Accounts": {
+      "main": [
+        [
+          {
+            "node": "Select One Account",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Select One Account": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Model A": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Model Selector",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Model B": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Model Selector",
+            "type": "ai_languageModel",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Model Selector": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Account Scoped Simple Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

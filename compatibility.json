@@ -1,0 +1,224 @@
+{
+  "schemaVersion": 1,
+  "packageVersion": "0.0.4",
+  "status": "tested self-hosted release",
+  "protocol": {
+    "clientVersion": "0.166.0",
+    "commit": "55c099a142eb302188fee00ab9e9062f2db1c359"
+  },
+  "runtime": {
+    "node": "26.12.1",
+    "n8n": "2.45.6",
+    "n8nWorkflow": "2.45.3",
+    "langChainCore": "1.2.8",
+    "baseDigest": "sha256:45edf89655fd66dd55ea9336c1791ad14777599fdbf6c5aec6db583ede99a40b"
+  },
+  "namespaces": [
+    "CUSTOM",
+    "n8n-nodes-codex-chat"
+  ],
+  "liveAccountVerified": true,
+  "capabilities": [
+    {
+      "id": "native_chat_tools",
+      "implementation": "implemented",
+      "verification": {
+        "synthetic": true,
+        "native": true,
+        "live": true
+      },
+      "sourceSupported": true,
+      "reason": "Pinned native Agent, sequential/parallel Code tools, HTTP/Workflow tools, parsers, chains, extraction and classification passed on both codecs. Live evidence is limited to one Lite text/tool suite."
+    },
+    {
+      "id": "account_visibility",
+      "implementation": "implemented",
+      "verification": {
+        "synthetic": true,
+        "native": true,
+        "live": true
+      },
+      "sourceSupported": true,
+      "reason": "Native account operations and account-scoped selectors passed; one current-only live account usage GET passed. Real login and rotating refresh remain unverified."
+    },
+    {
+      "id": "fresh_account_router",
+      "implementation": "implemented",
+      "verification": {
+        "synthetic": true,
+        "native": true,
+        "live": false
+      },
+      "sourceSupported": true,
+      "reason": "Both-codec selection, causal post-429 reads, admission failures, deadlines and cancellation passed with synthetic accounts. No real second-account failover was performed."
+    },
+    {
+      "id": "earned_resets",
+      "implementation": "implemented",
+      "verification": {
+        "synthetic": true,
+        "native": true,
+        "live": false
+      },
+      "sourceSupported": true,
+      "reason": "Native manual actions, caps, invalid-input no-spend cases, 36 separate-process fault points and 32-way contention passed with synthetic providers. Actual earned-allocation effects remain unverified."
+    },
+    {
+      "id": "structured_output",
+      "implementation": "implemented",
+      "verification": {
+        "synthetic": true,
+        "native": true,
+        "live": true
+      },
+      "sourceSupported": true,
+      "reason": "Local schema/Zod validation and native parser success, failure, refusal and explicit repair passed on both codecs. One live Lite JSON-schema result passed; the adapter adds no repair generation."
+    },
+    {
+      "id": "photo_input",
+      "implementation": "implemented",
+      "verification": {
+        "synthetic": true,
+        "native": true,
+        "live": true
+      },
+      "sourceSupported": true,
+      "reason": "Native memory/filesystem binary input, validation and tool continuation passed on both codecs. One live PNG input passed on Lite; standard-route visual inference remains unverified."
+    },
+    {
+      "id": "image_generation",
+      "implementation": "implemented",
+      "verification": {
+        "synthetic": true,
+        "native": true,
+        "live": false
+      },
+      "sourceSupported": true,
+      "reason": "Synthetic PNG/JPEG/WebP/GIF generation, native binary storage and HTTP delivery passed. Workflow Tool returns metadata only. No current real-account image generation was performed."
+    },
+    {
+      "id": "prompt_affinity_usage",
+      "implementation": "implemented",
+      "verification": {
+        "synthetic": true,
+        "native": true,
+        "live": false
+      },
+      "sourceSupported": true,
+      "reason": "Scoped hints, normalized usage and unchanged default request contracts passed on both codecs. Live cached-token counts were zero; cache hits, retention, pricing and savings are unverified."
+    },
+    {
+      "id": "execution_usage",
+      "implementation": "implemented",
+      "verification": {
+        "synthetic": true,
+        "native": true,
+        "live": false
+      },
+      "sourceSupported": true,
+      "reason": "Native Chat, Router, Image and downstream reports passed exact counters, profile isolation, partial coverage and finish cleanup. Boundaries, late closes and concurrent aggregation passed; reporting makes no provider request."
+    },
+    {
+      "id": "simple_memory_selection",
+      "implementation": "implemented",
+      "verification": {
+        "synthetic": true,
+        "native": true,
+        "live": false
+      },
+      "sourceSupported": true,
+      "reason": "Account-scoped Model Selector, shared Simple Memory across Agents/executions and explicit text-only memory budgeting passed. Router memory/history is rejected before inference."
+    },
+    {
+      "id": "queue_multiworker",
+      "implementation": "unsupported",
+      "verification": {
+        "synthetic": true,
+        "native": false,
+        "live": false
+      },
+      "sourceSupported": false,
+      "reason": "Requires a distributed coordinator; this release rejects queue mode."
+    },
+    {
+      "id": "direct_files_audio_video",
+      "implementation": "unsupported",
+      "verification": {
+        "synthetic": true,
+        "native": false,
+        "live": false
+      },
+      "sourceSupported": false,
+      "reason": "No supported subscription wire contract; use explicit native preprocessing/tools."
+    },
+    {
+      "id": "purchases_reserve_billing",
+      "implementation": "unsupported",
+      "verification": {
+        "synthetic": true,
+        "native": false,
+        "live": false
+      },
+      "sourceSupported": false,
+      "reason": "No purchase/top-up/reserve/settings writer exists."
+    },
+    {
+      "id": "image_editing",
+      "implementation": "unsupported",
+      "verification": {
+        "synthetic": false,
+        "native": false,
+        "live": false
+      },
+      "sourceSupported": true,
+      "reason": "Pinned source supports edits but lifecycle is outside this finite release."
+    },
+    {
+      "id": "all_future_protocols",
+      "implementation": "unsupported",
+      "verification": {
+        "synthetic": true,
+        "native": false,
+        "live": false
+      },
+      "sourceSupported": false,
+      "reason": "Discovery accepts future model IDs only through the two authenticated known codecs."
+    }
+  ],
+  "liveVerificationScope": "One current-access-only account: Responses Lite gpt-6.1-sol text, a two-turn harmless tool call, locally validated direct JSON schema, a PNG photo and authenticated account usage GET. Five Responses calls, 494 reported tokens, zero reported cached tokens; no refresh or source-session changes. No current real image generation, second account, reset consumption, quality-equivalence or cache-hit claim.",
+  "nativeNodeVersions": {
+    "agent": 3,
+    "toolCode": 1.3,
+    "httpRequestTool": 4.4,
+    "toolWorkflow": 2.2,
+    "outputParserStructured": 1.3,
+    "chainLlm": 1.9,
+    "informationExtractor": 1.2,
+    "textClassifier": 1.1,
+    "memoryBufferWindow": 1.3,
+    "modelSelector": 1,
+    "chatTrigger": 1.5,
+    "webhook": 2.2,
+    "respondToWebhook": 1.5
+  },
+  "limitations": [
+    "186 automated tests and 162 distinct native cases passed on the pinned stack. This is finite coverage, not a claim of exhaustive combinations or fault-free operation.",
+    "Standard wire route is synthetic/native only; the one live catalog exposes Lite models.",
+    "Real new login/rotating refresh and second-account failover are unverified.",
+    "Real reset consumption, purchases, reserve and settings changes were not exercised.",
+    "Optional low-verbosity/projection answer-quality equivalence and cache-hit savings are unverified.",
+    "Known codecs discover new catalog IDs; unknown future protocols/modalities require an update.",
+    "Community package loading requires the pinned n8n host dependency resolution and server-side account configuration described in the installation guide."
+  ],
+  "nativeNodeVersionsScope": "Physically exercised on pinned n8n 2.45.6 in the current v0.0.4 finite matrix; these are tested versions, not universal compatibility ranges.",
+  "verificationSummary": {
+    "automatedTests": 186,
+    "nativeDistinctCases": 162,
+    "nativeCaseExecutions": 172,
+    "resetFaultPoints": 36,
+    "ordinaryStressOperations": 16384,
+    "executionUsageStressOperations": 16384,
+    "liveResponsesCalls": 5,
+    "scope": "Native, fault, stress and live observations apply to the same compiled runtime bytes. Synthetic results establish contracts and counters, not real account entitlement or model-quality equivalence."
+  }
+}

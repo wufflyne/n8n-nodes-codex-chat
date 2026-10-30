@@ -1,0 +1,78 @@
+{
+  "name": "n8n-nodes-codex-chat",
+  "version": "0.0.4",
+  "description": "An independent, experimental Codex subscription integration for self-hosted n8n.",
+  "license": "MIT",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "docs",
+    "examples",
+    "compatibility.json"
+  ],
+  "bin": {
+    "n8n-codex-account": "dist/cli.js"
+  },
+  "engines": {
+    "node": ">=26.12.1 <27"
+  },
+  "scripts": {
+    "build": "node scripts/clean-dist.cjs && tsc -p tsconfig.json && node scripts/copy-assets.cjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --test --test-concurrency=1 test/*.test.cjs",
+    "check": "npm run build && npm test",
+    "pack:local": "npm run check && npm pack --pack-destination artifacts",
+    "release:local": "node scripts/release-local.cjs"
+  },
+  "peerDependencies": {
+    "@langchain/core": "1.2.8",
+    "n8n-workflow": "2.45.3"
+  },
+  "dependencies": {
+    "jose": "6.1.3",
+    "ajv": "8.20.0",
+    "ajv-formats": "3.0.1"
+  },
+  "devDependencies": {
+    "@langchain/core": "1.2.8",
+    "n8n-workflow": "2.45.3",
+    "@types/node": "26.0.0",
+    "typescript": "5.9.3"
+  },
+  "n8n": {
+    "n8nNodesApiVersion": 1,
+    "credentials": [
+      "dist/credentials/CodexAccount.credentials.js"
+    ],
+    "nodes": [
+      "dist/nodes/CodexChatModel/CodexChatModel.node.js",
+      "dist/nodes/CodexAccount/CodexAccount.node.js",
+      "dist/nodes/CodexAccountRouter/CodexAccountRouter.node.js",
+      "dist/nodes/CodexImage/CodexImage.node.js"
+    ]
+  },
+  "author": {
+    "name": "wufflyne",
+    "url": "https://wufflyne.com"
+  },
+  "keywords": [
+    "n8n-community-node-package",
+    "n8n",
+    "codex"
+  ],
+  "homepage": "https://github.com/wufflyne/n8n-nodes-codex-chat#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/wufflyne/n8n-nodes-codex-chat.git"
+  },
+  "bugs": {
+    "url": "https://github.com/wufflyne/n8n-nodes-codex-chat/issues"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  }
+}

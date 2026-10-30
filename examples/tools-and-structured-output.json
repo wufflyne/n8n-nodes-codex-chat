@@ -1,0 +1,129 @@
+{
+  "name": "Codex Wire — Tools and Structured Output",
+  "active": false,
+  "nodes": [
+    {
+      "id": "trigger",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "agent",
+      "name": "AI Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3,
+      "position": [
+        350,
+        0
+      ],
+      "parameters": {
+        "promptType": "define",
+        "text": "Use calculate_order once. Return its total, unit and complete flag.",
+        "hasOutputParser": true,
+        "options": {
+          "maxIterations": 3
+        }
+      }
+    },
+    {
+      "id": "model",
+      "name": "Codex Chat Model",
+      "type": "n8n-nodes-codex-chat.codexChatModel",
+      "typeVersion": 1,
+      "position": [
+        250,
+        200
+      ],
+      "parameters": {
+        "model": {
+          "mode": "id",
+          "value": "SELECT_FROM_YOUR_ACCOUNT_CATALOG"
+        }
+      }
+    },
+    {
+      "id": "tool",
+      "name": "calculate_order",
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2.2,
+      "position": [
+        450,
+        240
+      ],
+      "parameters": {
+        "description": "Read two synthetic records and return their complete projected quantities, prices, total and completeness information.",
+        "source": "parameter",
+        "workflowJson": "{\"name\":\"Codex Wire — Deterministic Tool\",\"active\":false,\"nodes\":[{\"id\":\"start\",\"name\":\"When Executed by Another Workflow\",\"type\":\"n8n-nodes-base.executeWorkflowTrigger\",\"typeVersion\":1.1,\"position\":[0,0],\"parameters\":{\"inputSource\":\"passthrough\"}},{\"id\":\"records\",\"name\":\"Synthetic Records and Projection\",\"type\":\"n8n-nodes-base.code\",\"typeVersion\":2,\"position\":[250,0],\"parameters\":{\"jsCode\":\"const rows = [{id:'a',quantity:2,price:3,unit:'USD',irrelevant:'deliberately excluded'},{id:'b',quantity:1,price:4,unit:'USD',irrelevant:'deliberately excluded'}]; return [{json:{status:'ok',records:rows.map(({id,quantity,price,unit})=>({id,quantity,price,unit})),total:rows.reduce((s,r)=>s+r.quantity*r.price,0),unit:'USD',sourceTimestamp:'2026-10-30T00:00:00Z',complete:true,totalRecords:rows.length,moreResults:false,retrievalPath:null}}];\"}}],\"connections\":{\"When Executed by Another Workflow\":{\"main\":[[{\"node\":\"Synthetic Records and Projection\",\"type\":\"main\",\"index\":0}]]}},\"settings\":{\"executionOrder\":\"v1\"}}"
+      }
+    },
+    {
+      "id": "parser",
+      "name": "Structured Output Parser",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        650,
+        240
+      ],
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\"type\": \"object\", \"properties\": {\"total\": {\"type\": \"number\"}, \"unit\": {\"type\": \"string\"}, \"complete\": {\"type\": \"boolean\"}}, \"required\": [\"total\", \"unit\", \"complete\"], \"additionalProperties\": false}"
+      }
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Codex Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "calculate_order": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
