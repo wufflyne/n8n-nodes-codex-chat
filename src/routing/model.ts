@@ -212,12 +212,13 @@ export class CodexAccountRouterModel extends BaseChatModel<CodexCallOptions> {
         this.#candidates.map((c) => c.resolve(scope.signal)),
       );
       const identities = resolved.map((r) => {
+        if (r.session.routingIdentity) return r.session.routingIdentity;
         assert(
           r.session.identity,
           "Router candidates require a verified native account identity.",
         );
         const i = r.session.identity;
-        return JSON.stringify([i.issuer, i.clientId, i.accountId]);
+        return fingerprint([i.issuer, i.clientId, i.accountId]);
       });
       assert(
         new Set(identities).size === identities.length,

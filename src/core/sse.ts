@@ -10,6 +10,7 @@ export async function* sseEvents(
   body: ReadableStream<Uint8Array>,
   signal: AbortSignal,
   idleTimeoutMs: number,
+  limits = { eventBytes: MAX_EVENT, streamBytes: MAX_STREAM },
 ): AsyncGenerator<JsonObject> {
   const reader = body.getReader();
   const decoder = new TextDecoder("utf-8", { fatal: true });
@@ -31,10 +32,7 @@ export async function* sseEvents(
         const event = record(JSON.parse(payload));
         return { ...event, type: event.type ?? name };
       } catch {
-        throw new CodexError(
-          "protocol",
-          "The provider returned an invalid streaming event.",
-        );
+        throw new CodexError("protocol", "The provider returned an invalid streaming event.");
       }
     }
     if (line.startsWith(":")) return undefined;
@@ -47,11 +45,8 @@ export async function* sseEvents(
       data.push(value);
     }
     if (field === "event") eventName = value;
-    if (eventSize > MAX_EVENT || data.length > 65536)
-      throw new CodexError(
-        "protocol",
-        "A provider streaming event exceeded the size limit.",
-      );
+    if (eventSize > limits.eventBytes || data.length > 65536)
+      throw new CodexError("protocol", "A provider streaming event exceeded the size limit.");
     return undefined;
   };
   try {
@@ -62,11 +57,8 @@ export async function* sseEvents(
         break;
       }
       total += next.value.byteLength;
-      if (total > MAX_STREAM)
-        throw new CodexError(
-          "protocol",
-          "The provider stream exceeded the response size limit.",
-        );
+      if (total > limits.streamBytes)
+        throw new CodexError("protocol", "The provider stream exceeded the response size limit.");
       const text = decoder.decode(next.value, { stream: true });
       let offset = 0;
       if (skipLf && text.length) {
@@ -79,11 +71,8 @@ export async function* sseEvents(
       let match: RegExpExecArray | null;
       while ((match = delimiters.exec(text)) !== null) {
         line += text.slice(offset, match.index);
-        if (line.length > MAX_EVENT)
-          throw new CodexError(
-            "protocol",
-            "A provider streaming line exceeded the size limit.",
-          );
+        if (line.length > limits.eventBytes)
+          throw new CodexError("protocol", "A provider streaming line exceeded the size limit.");
         const event = parse(line);
         line = "";
         offset = match.index + 1;
@@ -95,17 +84,13 @@ export async function* sseEvents(
         if (event) yield event;
       }
       line += text.slice(offset);
-      if (line.length > MAX_EVENT)
-        throw new CodexError(
-          "protocol",
-          "A provider streaming line exceeded the size limit.",
-        );
+      if (line.length > limits.eventBytes)
+        throw new CodexError("protocol", "A provider streaming line exceeded the size limit.");
     }
     // An unterminated final SSE frame is deliberately ignored; it is not a completed response.
   } catch (error) {
     if (error instanceof CodexError) throw error;
-    if (signal.aborted)
-      throw new CodexError("cancelled", "The request was cancelled.");
+    if (signal.aborted) throw new CodexError("cancelled", "The request was cancelled.");
     throw new CodexError(
       "protocol",
       "The provider stream was interrupted or contained invalid UTF-8.",
@@ -122,9 +107,7 @@ function readWithDeadline(
   idleMs: number,
 ): Promise<ReadableStreamReadResult<Uint8Array>> {
   if (signal.aborted)
-    return Promise.reject(
-      new CodexError("cancelled", "The request was cancelled."),
-    );
+    return Promise.reject(new CodexError("cancelled", "The request was cancelled."));
   return new Promise((resolve, reject) => {
     const finish = () => {
       clearTimeout(timer);
@@ -136,12 +119,7 @@ function readWithDeadline(
     };
     const timer = setTimeout(() => {
       finish();
-      reject(
-        new CodexError(
-          "timeout",
-          "The provider stream exceeded its idle timeout.",
-        ),
-      );
+      reject(new CodexError("timeout", "The provider stream exceeded its idle timeout."));
     }, idleMs);
     signal.addEventListener("abort", cancel, { once: true });
     reader.read().then(
@@ -151,9 +129,7 @@ function readWithDeadline(
       },
       () => {
         finish();
-        reject(
-          new CodexError("protocol", "The provider stream was interrupted."),
-        );
+        reject(new CodexError("protocol", "The provider stream was interrupted."));
       },
     );
   });
@@ -190,10 +166,7 @@ export class ResponseAccumulator {
         ? `call:${item?.call_id ?? event.call_id}`
         : undefined,
     ].filter((value): value is string => value !== undefined);
-    assert(
-      aliases.length > 0 || item,
-      "A provider tool delta has no item or call identifier.",
-    );
+    assert(aliases.length > 0 || item, "A provider tool delta has no item or call identifier.");
     const known = aliases
       .map((alias) => this.aliases.get(alias))
       .filter((value): value is AccumulatedItem => value !== undefined);
@@ -203,10 +176,7 @@ export class ResponseAccumulator {
     );
     let state = known[0];
     if (!state) {
-      assert(
-        this.items.length < 4096,
-        "The provider returned too many response items.",
-      );
+      assert(this.items.length < 4096, "The provider returned too many response items.");
       state = {
         item: {},
         order: this.items.length,
@@ -254,8 +224,7 @@ export class ResponseAccumulator {
         "Provider tool arguments conflict with their streaming deltas.",
       );
       assert(
-        state.argumentsDone === undefined ||
-          state.argumentsDone === item.arguments,
+        state.argumentsDone === undefined || state.argumentsDone === item.arguments,
         "Provider tool arguments conflict with their completed arguments.",
       );
     }
@@ -273,12 +242,9 @@ export class ResponseAccumulator {
 
   consume(event: JsonObject): CompletedResponse | undefined {
     if (
-      [
-        "response.failed",
-        "response.incomplete",
-        "error",
-        "response.error",
-      ].includes(String(event.type))
+      ["response.failed", "response.incomplete", "error", "response.error"].includes(
+        String(event.type),
+      )
     ) {
       throw new CodexError(
         "provider",
@@ -287,14 +253,10 @@ export class ResponseAccumulator {
           : "The provider reported a failed response. No tool calls were released.",
       );
     }
-    if (
-      event.type === "response.output_item.added" ||
-      event.type === "response.output_item.done"
-    ) {
+    if (event.type === "response.output_item.added" || event.type === "response.output_item.done") {
       const item = record(event.item) as ResponseItem;
       const state = this.state(event, item);
-      if (event.type === "response.output_item.done")
-        this.finishItem(state, item);
+      if (event.type === "response.output_item.done") this.finishItem(state, item);
       else {
         assert(!state.done, "The provider reopened a completed output item.");
         state.item = item;
@@ -339,28 +301,19 @@ export class ResponseAccumulator {
       "The provider completion event is not successful.",
     );
     const id = string(response.id, "Provider response identifier", 256);
-    assert(
-      /^[A-Za-z0-9_-]{1,256}$/.test(id),
-      "The provider response identifier is invalid.",
-    );
+    assert(/^[A-Za-z0-9_-]{1,256}$/.test(id), "The provider response identifier is invalid.");
     assert(
       response.output === undefined || Array.isArray(response.output),
       "The provider returned invalid completed output.",
     );
     let output: ResponseItem[];
     if (Array.isArray(response.output)) {
-      assert(
-        response.output.length <= 4096,
-        "The provider returned too many response items.",
-      );
+      assert(response.output.length <= 4096, "The provider returned too many response items.");
       const included = new Set<AccumulatedItem>();
       output = response.output.map((value, index) => {
         const item = record(value) as ResponseItem;
         const state = this.state({ output_index: index }, item);
-        assert(
-          !included.has(state),
-          "The provider duplicated a completed output item.",
-        );
+        assert(!included.has(state), "The provider duplicated a completed output item.");
         included.add(state);
         this.finishItem(state, item);
         return item;

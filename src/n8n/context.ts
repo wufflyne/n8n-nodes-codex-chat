@@ -1,3 +1,4 @@
+import { nativeService } from "../service/native.js";
 import type { ISupplyDataFunctions } from "n8n-workflow";
 import { assert } from "../core/errors.js";
 import type { ExecutionContext } from "../core/affinity.js";
@@ -46,6 +47,10 @@ export function nativeContext(ctx: Context): ExecutionContext {
     cleanups.add(key);
     const cleanup = () => {
       clearExecutionUsage(context);
+      if (process.env.N8N_CODEX_MODE === "gateway")
+        void nativeService()
+          .finish(context)
+          .catch(() => undefined);
       cleanups.delete(key);
     };
     ctx.onExecutionFinish!(cleanup);

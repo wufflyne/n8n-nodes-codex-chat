@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Codex Wire</title>
+    <link rel="stylesheet" href="/console.css" />
+    <script defer src="/console.js"></script>
+  </head>
+  <body>
+    <aside>
+      <a class="brand" href="/"
+        ><img src="/codex.svg" alt="" width="38" height="38" /><span
+          >Codex Wire<small>ACCOUNT WORKSPACE</small></span
+        ></a
+      >
+      <nav aria-label="Workspace">
+        <button data-view="accounts" aria-current="page">Accounts</button
+        ><button data-view="add">Add account</button
+        ><button data-view="connections">Connections</button
+        ><button data-view="activity">Activity & settings</button>
+      </nav>
+      <div class="aside-note">Your subscription.<br />Your automation.</div>
+      <footer>
+        By wufflyne ·
+        <a href="https://wufflyne.com" target="_blank" rel="noreferrer">wufflyne.com</a>
+      </footer>
+    </aside>
+    <main>
+      <header>
+        <div class="eyebrow">CODEX SUBSCRIPTION CONNECTIONS</div>
+        <button id="logout" class="quiet" hidden>Sign out</button>
+      </header>
+      <div id="notice" role="status" aria-live="polite"></div>
+      <section id="content" aria-labelledby="view-title"></section>
+    </main>
+    <dialog id="delivery">
+      <form method="dialog">
+        <button class="close quiet" aria-label="Close setup bundle">×</button>
+      </form>
+      <p class="eyebrow">PROTECTED SETUP</p>
+      <h2>Save your connection details</h2>
+      <p>
+        This bundle is shown only until you acknowledge delivery. Keep it in a protected location.
+        Existing secrets are never reconstructed automatically.
+      </p>
+      <label>Setup bundle<input id="secret" type="password" readonly autocomplete="off" /></label>
+      <div class="actions">
+        <button id="reveal" class="secondary">Show</button><button id="copy">Copy</button
+        ><button id="download" class="secondary">Download</button>
+      </div>
+      <p id="delivery-id" class="muted"></p>
+      <button id="acknowledge" class="wide">I saved these details</button>
+    </dialog>
+  </body>
+</html>

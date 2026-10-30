@@ -7,7 +7,7 @@ export class CodexAccount implements ICredentialType {
   properties: INodeProperties[] = [
     {
       displayName:
-        "Connect an isolated account with the bundled n8n-codex-account helper, using Device Login or Manual Import. Copy its protected binding file into these fields. Tokens stay in the encrypted profile store. This is the experimental Codex backend, using your subscription allowance.",
+        "Connect an isolated account with the Codex Wire console in gateway mode, or the n8n-codex-account helper in embedded mode. Use Device Login or Manual Import and copy the protected profile binding into these unchanged fields. Tokens stay with the single profile owner. This is the experimental Codex backend, using your subscription allowance.",
       name: "notice",
       type: "notice",
       default: "",

@@ -1,3 +1,4 @@
+import { nativeService } from "../../service/native.js";
 import {
   NodeConnectionTypes,
   NodeOperationError,
@@ -6,7 +7,7 @@ import {
   type IExecuteFunctions,
   type INodeExecutionData,
 } from "n8n-workflow";
-import { credentialBinding, runtime } from "../../runtime.js";
+import { credentialBinding } from "../../runtime.js";
 import { assert, safeError } from "../../core/errors.js";
 import { nativeContext } from "../../n8n/context.js";
 export class CodexImage implements INodeType {
@@ -16,8 +17,7 @@ export class CodexImage implements INodeType {
     icon: "file:codex.svg",
     group: ["transform"],
     version: 1,
-    description:
-      "Generate an image with your Codex account and return native binary",
+    description: "Generate an image with your Codex account and return native binary",
     defaults: { name: "Codex Image" },
     inputs: [NodeConnectionTypes.Main],
     outputs: [NodeConnectionTypes.Main],
@@ -78,16 +78,12 @@ export class CodexImage implements INodeType {
     ],
   };
   async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
-    const rt = runtime(),
+    const service = nativeService(),
       binding = credentialBinding(await this.getCredentials("codexAccount")),
       result: INodeExecutionData[] = [];
     for (let i = 0; i < this.getInputData().length; i++)
       try {
-        const property = this.getNodeParameter(
-          "binaryProperty",
-          i,
-          "data",
-        ) as string;
+        const property = this.getNodeParameter("binaryProperty", i, "data") as string;
         assert(
           /^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(property),
           "Choose a valid output binary property.",
@@ -95,7 +91,7 @@ export class CodexImage implements INodeType {
         const options = this.getNodeParameter("options", i, {}) as {
           timeoutSeconds?: number;
         };
-        const generated = await rt.images.generate(
+        const generated = await service.image(
           binding,
           this.getNodeParameter("prompt", i) as string,
           this.getNodeParameter("transparentBackground", i, false) === true,

@@ -1,6 +1,14 @@
 import { createHash } from "node:crypto";
 import { assert } from "./errors.js";
-import type { Session } from "./types.js";
+import type { Identity, Session } from "./types.js";
+/** Verified account equality, independent of profile aliases and rotating credentials. */
+export function accountIdentityKey(identity: Identity): string {
+  return createHash("sha256")
+    .update(
+      JSON.stringify([identity.issuer, identity.clientId, identity.accountId]),
+    )
+    .digest("hex");
+}
 export interface ExecutionContext {
   instanceId: string;
   workflowId: string;

@@ -1,0 +1,71 @@
+name: work-n8n-codex-v005
+services:
+  gateway:
+    image: work-n8n-codex-v005-gateway:0.0.5
+    stop_grace_period: 120s
+    container_name: work-n8n-codex-v005-gateway
+    build:
+      context: ${QUALIFICATION_ROOT:?Set the absolute approved workspace qualification directory}/build-output/${BUILD_CHECKPOINT:?Set the prepared build checkpoint}
+      dockerfile: gateway.Dockerfile
+      network: none
+    cpus: 1.0
+    mem_limit: 512m
+    memswap_limit: 512m
+    pids_limit: 64
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    ports: ["127.0.0.1:15888:8788"]
+    volumes:
+      - ${QUALIFICATION_ROOT}/gateway-data:/var/lib/codex-wire
+      - ${QUALIFICATION_ROOT}/gateway-config:/etc/codex-wire:ro
+    environment:
+      NODE_OPTIONS: "--max-old-space-size=256 --require=/etc/codex-wire/synthetic-fetch.cjs"
+    networks: [test]
+  n8n:
+    image: work-n8n-codex-v005-n8n:2.45.6-context-v1
+    container_name: work-n8n-codex-v005-n8n
+    build:
+      context: ${QUALIFICATION_ROOT}/build-output/${BUILD_CHECKPOINT}
+      dockerfile: n8n.Dockerfile
+      network: none
+    cpus: 2.0
+    mem_limit: 2g
+    memswap_limit: 2g
+    pids_limit: 256
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    ports: ["127.0.0.1:15885:5678"]
+    volumes: ["${QUALIFICATION_ROOT}/n8n-data:/home/node/.n8n"]
+    environment:
+      N8N_CODEX_MODE: gateway
+      N8N_CODEX_GATEWAY_URL: http://gateway:8787
+      N8N_CODEX_GATEWAY_PRIVATE_HTTP: "true"
+      N8N_CODEX_GATEWAY_TOKEN_FILE: /home/node/.n8n/codex-wire/installation.key
+      N8N_CODEX_CONTEXT_CONFIG_FILE: /home/node/.n8n/codex-wire/context.json
+      N8N_SECURE_COOKIE: "false"
+      N8N_CUSTOM_EXTENSIONS: ${QUALIFICATION_CUSTOM_EXTENSIONS:-}
+      N8N_USER_FOLDER: /home/node/.n8n/${QUALIFICATION_VARIANT:-agents-only}
+      N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS: "true"
+      NODE_OPTIONS: --max-old-space-size=1536
+    networks: [test]
+  fixture:
+    image: work-n8n-codex-v005-fixture:0.0.5
+    container_name: work-n8n-codex-v005-fixture
+    build:
+      context: ${QUALIFICATION_ROOT}/build-output/${BUILD_CHECKPOINT}
+      dockerfile: fixture.Dockerfile
+      network: none
+    cpus: 0.5
+    mem_limit: 128m
+    memswap_limit: 128m
+    pids_limit: 32
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    volumes: ["${QUALIFICATION_ROOT}/fixture-data:/fixtures:ro"]
+    networks: [test]
+networks:
+  test:
+    name: work-n8n-codex-v005-test
+    internal: true

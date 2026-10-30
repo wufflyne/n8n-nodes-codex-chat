@@ -32,6 +32,7 @@ import {
 } from "./core/affinity.js";
 import { recordInvocation, type CallRecorder } from "./core/execution-usage.js";
 import { normalizeUsage } from "./core/usage.js";
+import { validateCompletion } from "./kernel/completion.js";
 import {
   structuredRunnable,
   validatedOutputFormat,
@@ -95,7 +96,10 @@ function prepareRequest(
   options: CodexCallOptions,
   config: Pick<CodexModelOptions, "replay" | "context" | "affinityPolicy">,
 ) {
-  assert(!options.stop?.length, "Stop sequences are unsupported by this subscription route.");
+  assert(
+    !options.stop?.length,
+    "Stop sequences are unsupported by this subscription route.",
+  );
   validateReliability(settings);
   validateSettings(model, settings);
   const registry = toolRegistry(options.tools);
@@ -231,10 +235,17 @@ export class CodexChatModel extends BaseChatModel<CodexCallOptions> {
             ? {}
             : { parallelToolCalls: options.parallel_tool_calls }),
         };
-        prepareRequest(messages, selected.model, settings, selected.session, options, {
-          ...config,
-          ...overrides,
-        });
+        prepareRequest(
+          messages,
+          selected.model,
+          settings,
+          selected.session,
+          options,
+          {
+            ...config,
+            ...overrides,
+          },
+        );
       },
       recover: async (policy: RecoveryPolicy, signal?: AbortSignal) => {
         assert(
@@ -319,7 +330,12 @@ export class CodexChatModel extends BaseChatModel<CodexCallOptions> {
       );
       const account = this.#config.account;
       const { registry, request, affinity } = prepareRequest(
-        messages, model, settings, session, options, this.#config,
+        messages,
+        model,
+        settings,
+        session,
+        options,
+        this.#config,
       );
       if (account?.policy.automatic) {
         assert(
@@ -432,6 +448,8 @@ export class CodexChatModel extends BaseChatModel<CodexCallOptions> {
           yield chunk;
           await runManager?.handleLLMNewToken(event.text);
         } else {
+          if (!options.codexStructuredOutput)
+            validateCompletion(event.response, registry.tools, streamedText);
           const message = outputMessage(
             event.response,
             registry,

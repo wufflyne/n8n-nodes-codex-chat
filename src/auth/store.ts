@@ -1,3 +1,4 @@
+import { isProfileAccess, type ProfileBinding } from "../service/access.js";
 import {
   createCipheriv,
   createDecipheriv,
@@ -7,28 +8,18 @@ import {
   timingSafeEqual,
 } from "node:crypto";
 import { constants } from "node:fs";
-import {
-  mkdir,
-  lstat,
-  open,
-  realpath,
-  rename,
-  rm,
-  rmdir,
-} from "node:fs/promises";
+import { mkdir, lstat, open, realpath, rename, rm, rmdir } from "node:fs/promises";
 import path from "node:path";
 import { CodexError, assert, record } from "../core/errors.js";
 import { delay } from "../core/http.js";
-import { PROVIDER, type Binding, type Profile } from "../core/types.js";
+import { PROVIDER, type Profile } from "../core/types.js";
 
 export function bindingHash(secret: string): string {
   return createHash("sha256").update(secret).digest("hex");
 }
 export function profileId(value: string): string {
   assert(
-    /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(
-      value,
-    ),
+    /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(value),
     "The account profile identifier is invalid.",
   );
   return value;
@@ -41,21 +32,18 @@ export class ProfileStore {
   constructor(
     readonly directory: string,
     key: Buffer,
+    private readonly ensureOwner?: () => Promise<void>,
+    private readonly readOnly = false,
   ) {
-    assert(
-      path.isAbsolute(directory),
-      "N8N_CODEX_STORE_DIR must be an absolute path.",
-    );
-    assert(
-      key.length === 32,
-      "N8N_CODEX_STORE_KEY must be a base64-encoded 32-byte key.",
-    );
+    assert(path.isAbsolute(directory), "N8N_CODEX_STORE_DIR must be an absolute path.");
+    assert(key.length === 32, "N8N_CODEX_STORE_KEY must be a base64-encoded 32-byte key.");
     this.key = Buffer.from(key);
   }
 
   private async prepare(): Promise<void> {
+    await this.ensureOwner?.();
     try {
-      await mkdir(this.directory, { mode: 0o700, recursive: true });
+      if (!this.readOnly) await mkdir(this.directory, { mode: 0o700, recursive: true });
       const stat = await lstat(this.directory);
       assert(
         stat.isDirectory() &&
@@ -77,6 +65,10 @@ export class ProfileStore {
     return path.join(this.directory, `${profileId(id)}.json.enc`);
   }
 
+  async ready(): Promise<void> {
+    await this.prepare();
+  }
+
   async exists(id: string): Promise<boolean> {
     await this.prepare();
     try {
@@ -88,13 +80,13 @@ export class ProfileStore {
     }
   }
 
-  async read(binding: Binding): Promise<Profile> {
+  async read(binding: ProfileBinding): Promise<Profile> {
     const profile = await this.readId(binding.profileId);
+    if (isProfileAccess(binding)) return profile;
     const supplied = Buffer.from(bindingHash(binding.bindingSecret), "hex");
     const expected = Buffer.from(profile.bindingHash, "hex");
     assert(
-      expected.length === supplied.length &&
-        timingSafeEqual(expected, supplied),
+      expected.length === supplied.length && timingSafeEqual(expected, supplied),
       "The account binding is invalid. Recreate the n8n credential from the profile binding file.",
     );
     return profile;
@@ -120,13 +112,8 @@ export class ProfileStore {
     await this.prepare();
     try {
       const file = this.filename(id);
-      const envelope = record(
-        JSON.parse(await readPrivateFile(file, 1024 * 1024)),
-      );
-      assert(
-        envelope.version === 1,
-        "The account store format is unsupported.",
-      );
+      const envelope = record(JSON.parse(await readPrivateFile(file, 1024 * 1024)));
+      assert(envelope.version === 1, "The account store format is unsupported.");
       const decipher = createDecipheriv(
         "aes-256-gcm",
         this.key,
@@ -152,6 +139,7 @@ export class ProfileStore {
   }
 
   async write(profile: Profile): Promise<void> {
+    assert(!this.readOnly, "This profile store is open for local read-only diagnostics.");
     profile = structuredClone(profile);
     this.reads.delete(profile.id);
     validateProfile(profile);
@@ -159,10 +147,7 @@ export class ProfileStore {
     const iv = randomBytes(12);
     const cipher = createCipheriv("aes-256-gcm", this.key, iv);
     cipher.setAAD(Buffer.from(profile.id));
-    const data = Buffer.concat([
-      cipher.update(JSON.stringify(profile), "utf8"),
-      cipher.final(),
-    ]);
+    const data = Buffer.concat([cipher.update(JSON.stringify(profile), "utf8"), cipher.final()]);
     await atomicWrite(
       this.filename(profile.id),
       JSON.stringify({
@@ -177,10 +162,9 @@ export class ProfileStore {
 
   /** A failed bootstrap renewal cannot replay an imported rotating secret after restart. */
   async claimImportRenewal(refreshToken: string): Promise<void> {
+    assert(!this.readOnly, "This profile store is open for local read-only diagnostics.");
     await this.prepare();
-    const fingerprint = createHmac("sha256", this.key)
-      .update(refreshToken)
-      .digest("hex");
+    const fingerprint = createHmac("sha256", this.key).update(refreshToken).digest("hex");
     const filename = path.join(this.directory, `.import-${fingerprint}.used`);
     let handle;
     try {
@@ -205,11 +189,8 @@ export class ProfileStore {
     }
   }
 
-  async locked<T>(
-    id: string,
-    action: () => Promise<T>,
-    timeoutMs = 30000,
-  ): Promise<T> {
+  async locked<T>(id: string, action: () => Promise<T>, timeoutMs = 30000): Promise<T> {
+    assert(!this.readOnly, "This profile store is open for local read-only diagnostics.");
     await this.prepare();
     const lock = path.join(this.directory, `${profileId(id)}.lock`);
     const deadline = Date.now() + timeoutMs;
@@ -219,10 +200,7 @@ export class ProfileStore {
         break;
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== "EEXIST")
-          throw new CodexError(
-            "storage",
-            "The account lock could not be acquired.",
-          );
+          throw new CodexError("storage", "The account lock could not be acquired.");
         if (Date.now() >= deadline)
           throw new CodexError(
             "storage",
@@ -280,13 +258,7 @@ function validateProfile(profile: Profile): void {
     "The account profile binding or state is invalid.",
   );
   assert(
-    [
-      profile.issuer,
-      profile.subject,
-      profile.accountId,
-      profile.clientId,
-      profile.label,
-    ].every(
+    [profile.issuer, profile.subject, profile.accountId, profile.clientId, profile.label].every(
       (value) =>
         typeof value === "string" &&
         value.length > 0 &&
@@ -306,9 +278,7 @@ function validateProfile(profile: Profile): void {
     [profile.tokens.refreshToken, profile.tokens.idToken].every(
       (value) =>
         value === undefined ||
-        (typeof value === "string" &&
-          value.length > 0 &&
-          value.length <= 65536),
+        (typeof value === "string" && value.length > 0 && value.length <= 65536),
     ),
     "The account token record is invalid.",
   );
@@ -326,16 +296,10 @@ function validateProfile(profile: Profile): void {
 }
 
 /** Validate and read the same descriptor; never follow a swapped file symlink. */
-export async function readPrivateFile(
-  filename: string,
-  maxBytes: number,
-): Promise<string> {
+export async function readPrivateFile(filename: string, maxBytes: number): Promise<string> {
   let handle;
   try {
-    handle = await open(
-      filename,
-      constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
-    );
+    handle = await open(filename, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
     const stat = await handle.stat();
     assert(
       stat.isFile() && (stat.mode & 0o077) === 0 && stat.size <= maxBytes,
@@ -363,10 +327,7 @@ export async function readPrivateFile(
   }
 }
 
-export async function atomicWrite(
-  filename: string,
-  data: string,
-): Promise<void> {
+export async function atomicWrite(filename: string, data: string): Promise<void> {
   const temporary = `${filename}.${randomBytes(8).toString("hex")}.tmp`;
   let handle;
   try {

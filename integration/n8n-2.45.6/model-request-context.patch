@@ -1,0 +1,766 @@
+--- /dev/null
++++ b/packages/@n8n/agents/src/runtime/model/model-request-context.ts
+@@ -0,0 +1,37 @@
++/** Server-owned lifecycle hook; never configured from agent prompts or custom headers. */
++export interface ModelOperationContext {
++	version: 1;
++	installationId: string;
++	projectId: string;
++	agentRevision: string;
++	conversationId: string;
++	branchId: string;
++	runId: string;
++	turnId: string;
++	operationId: string;
++	operationIssuedAt: number;
++	kind: 'turn' | 'title' | 'helper' | 'subagent' | 'compaction';
++	cause?: 'generation' | 'empty_turn_retry' | 'regeneration';
++	parentOperationId?: string;
++}
++export interface ModelRequestHooks {
++	prepare(
++		input: {
++			runId: string;
++			agentRevision?: string;
++			parentOperationId?: string;
++			previous?: ModelOperationContext;
++			cause?: ModelOperationContext['cause'];
++			kind?: ModelOperationContext['kind'];
++		},
++		persist: (context: ModelOperationContext) => Promise<void>,
++	): Promise<ModelOperationContext | undefined>;
++	run<T>(context: ModelOperationContext | undefined, action: () => T): T;
++	decorateModel<T>(model: T, kind?: ModelOperationContext['kind']): T;
++	decorateFetch(fetch: typeof globalThis.fetch): typeof globalThis.fetch;
++}
++export function modelRequestHooks(): ModelRequestHooks | undefined {
++	return (globalThis as Record<symbol, unknown>)[Symbol.for('n8n.model-request-context.v1')] as
++		| ModelRequestHooks
++		| undefined;
++}
+--- a/packages/@n8n/agents/src/types/sdk/agent.ts
++++ b/packages/@n8n/agents/src/types/sdk/agent.ts
+@@ -1,3 +1,4 @@
++import type { ModelOperationContext } from '../../runtime/model/model-request-context';
+ import type { ProviderOptions } from '@ai-sdk/provider-utils';
+ import type {
+ 	GenerateTextStepEndEvent,
+@@ -507,6 +508,8 @@
+ );
+ 
+ export interface SerializableAgentState {
++	modelRequestContext?: ModelOperationContext;
++	modelRequestParentOperationId?: string;
+ 	persistence?: AgentPersistenceOptions;
+ 	status: AgentRunState;
+ 	messageList: SerializedMessageList;
+--- a/packages/@n8n/agents/src/types/runtime/agent-runtime.ts
++++ b/packages/@n8n/agents/src/types/runtime/agent-runtime.ts
+@@ -40,6 +40,7 @@
+ ) => Promise<string | undefined>;
+ 
+ export interface AgentRuntimeConfig {
++	modelRequestRevision?: string;
+ 	name: string;
+ 	model: ModelConfig;
+ 	/**
+--- a/packages/@n8n/agents/src/sdk/agent.ts
++++ b/packages/@n8n/agents/src/sdk/agent.ts
+@@ -174,6 +174,7 @@
+ 	private modelConfig?: ModelConfig;
+ 
+ 	private modelFetchValue?: FetchFn;
++	private modelRequestRevisionValue?: string;
+ 
+ 	private instructionProviderOpts?: ProviderOptions;
+ 
+@@ -285,6 +286,11 @@
+ 	 * Provide a proxy-aware `fetch` for the agent's model calls. When unset, model
+ 	 * construction falls back to the ambient HTTP_PROXY resolver.
+ 	 */
++	setModelRequestRevision(revision: string): this {
++		this.modelRequestRevisionValue = revision;
++		return this;
++	}
++
+ 	modelFetch(fetch: FetchFn): this {
+ 		this.modelFetchValue = fetch;
+ 		return this;
+@@ -1155,6 +1161,7 @@
+ 			name: this.name,
+ 			model: modelConfig,
+ 			...(this.modelFetchValue !== undefined ? { modelFetch: this.modelFetchValue } : {}),
++			modelRequestRevision: this.modelRequestRevisionValue,
+ 			instructions,
+ 			...(this.skillSource ? { skillSource: this.skillSource } : {}),
+ 			tools: allTools.length > 0 ? allTools : undefined,
+@@ -1315,6 +1322,7 @@
+ 				// Inherit the parent's transport so children can't bypass a
+ 				// guarded/instrumented fetch via the ambient default.
+ 				...(this.modelFetchValue !== undefined ? { modelFetch: this.modelFetchValue } : {}),
++				modelRequestRevision: this.modelRequestRevisionValue,
+ 				instructions:
+ 					'You are a focused subagent working on a specific delegated task. Complete the delegated task independently and return a concise, self-contained summary to your parent agent.',
+ 				tools: tools.length > 0 ? tools : undefined,
+--- a/packages/@n8n/agents/src/types/runtime/agent-loop.ts
++++ b/packages/@n8n/agents/src/types/runtime/agent-loop.ts
+@@ -1,3 +1,4 @@
++import type { ModelOperationContext } from '../../runtime/model/model-request-context';
+ import type {
+ 	LanguageModel,
+ 	LanguageModelCallOptions,
+@@ -56,6 +57,7 @@
+ 
+ /** Per-iteration inputs for the LLM call, assembled by the shared loop. */
+ export interface ModelCallContext {
++	modelRequestContext?: ModelOperationContext;
+ 	model: LanguageModel;
+ 	system: SystemModelMessage | SystemModelMessage[];
+ 	messages: ModelMessage[];
+--- a/packages/@n8n/agents/src/runtime/model/lazy-ai.ts
++++ b/packages/@n8n/agents/src/runtime/model/lazy-ai.ts
+@@ -1,12 +1,22 @@
++import { modelRequestHooks, type ModelOperationContext } from './model-request-context';
+ import type * as AiSdk from 'ai';
+ 
+ let _aiMod: typeof AiSdk | undefined;
+ 
+-export function loadAi(): typeof AiSdk {
++export function loadAi(kind?: ModelOperationContext['kind']): typeof AiSdk {
+ 	if (!_aiMod) {
+ 		// eslint-disable-next-line @typescript-eslint/no-require-imports
+ 		const mod = require('ai') as typeof AiSdk;
+ 		_aiMod = mod;
+ 	}
+-	return _aiMod;
++	const hooks = modelRequestHooks();
++	if (!hooks) return _aiMod;
++	return new Proxy(_aiMod, {
++		get(target, property) {
++			const value = Reflect.get(target, property);
++			if (property !== 'generateText' && property !== 'streamText') return value;
++			return (options: { model: unknown }) =>
++				value({ ...options, model: hooks.decorateModel(options.model, kind) });
++		},
++	});
+ }
+--- a/packages/@n8n/agents/src/runtime/loop/agent-runtime.ts
++++ b/packages/@n8n/agents/src/runtime/loop/agent-runtime.ts
+@@ -1,3 +1,4 @@
++import { modelRequestHooks } from '../model/model-request-context';
+ import type { ProviderOptions } from '@ai-sdk/provider-utils';
+ import type { TelemetryOptions, ToolCallRepairFunction, ToolSet } from 'ai';
+ 
+@@ -583,6 +584,10 @@
+ 	private async restoreCheckpointMessages(
+ 		state: SerializableAgentState,
+ 	): Promise<AgentMessageList> {
++		this.updateState({
++			modelRequestContext: state.status === 'running' ? state.modelRequestContext : undefined,
++			modelRequestParentOperationId: state.modelRequestParentOperationId,
++		});
+ 		const list = AgentMessageList.deserialize(state.messageList);
+ 		this.context.hydrateDeferredToolsFromList(list);
+ 		await hydrateFileParts(list.messages(), this.config.fileStore, {
+@@ -1069,7 +1074,26 @@
+ 			hostVolatileInstructions,
+ 			activeSkills: this.activeSkills,
+ 		});
++		const modelRequestContext = await modelRequestHooks()?.prepare(
++			{
++				runId: this.runId,
++				agentRevision: this.config.modelRequestRevision,
++				parentOperationId: this.currentState.modelRequestParentOperationId,
++				previous: this.currentState.modelRequestContext,
++			},
++			async (context) => {
++				this.updateState({
++					modelRequestContext: context,
++					modelRequestParentOperationId:
++						this.currentState.modelRequestParentOperationId ?? context.parentOperationId,
++					persistence: options?.persistence,
++					messageList: list.serialize(),
++				});
++				await this.runState.checkpointStep(this.runId, this.getState());
++			},
++		);
+ 		const modelCallContext: ModelCallContext = {
++			modelRequestContext,
+ 			model: staticContext.model,
+ 			system: prompt.system,
+ 			messages: prompt.messages,
+@@ -1114,7 +1138,10 @@
+ 					return undefined;
+ 				}
+ 			}
+-			const turn = await sink.callModel(modelCallContext);
++			const hooks = modelRequestHooks();
++			const turn = await (hooks
++				? hooks.run(modelCallContext.modelRequestContext, () => sink.callModel(modelCallContext))
++				: sink.callModel(modelCallContext));
+ 			// Price the turn before guardrails see it. The finish chunk prices
+ 			// the summed tokens later; mergeUsage drops per-turn cost.
+ 			turn.usage = this.applyCost(turn.usage);
+@@ -1127,6 +1154,18 @@
+ 		for (let retry = 0; turn && retry < MAX_EMPTY_TURN_RETRIES && isEmptyModelTurn(turn); retry++) {
+ 			this.recordTurnUsage(ctx, sink, state, turn);
+ 			this.assertNotAborted(ctx.abortScope);
++			modelCallContext.modelRequestContext = await modelRequestHooks()?.prepare(
++				{
++					runId: this.runId,
++					agentRevision: this.config.modelRequestRevision,
++					parentOperationId: this.currentState.modelRequestParentOperationId,
++					cause: 'empty_turn_retry',
++				},
++				async (context) => {
++					this.updateState({ modelRequestContext: context, messageList: ctx.list.serialize() });
++					await this.runState.checkpointStep(this.runId, this.getState());
++				},
++			);
+ 			turn = await callModel();
+ 		}
+ 		if (!turn) return undefined;
+@@ -1215,7 +1254,7 @@
+ 		this.emitTurnEnd(turn.newMessages, extractSettledToolCalls(ctx.list.responseDelta()));
+ 		// All tools have settled. Observe before the next call and its checkpoint.
+ 		await this.memory.maybeObserveMidRun(ctx.list, ctx.options);
+-		if (stepCheckpoint && ctx.options?.stepCheckpoints) {
++		if (stepCheckpoint && (ctx.options?.stepCheckpoints || modelRequestHooks())) {
+ 			await this.persistStepCheckpoint(
+ 				ctx.list,
+ 				state.totalUsage,
+@@ -1335,6 +1374,8 @@
+ 		markSuspendedToolCalls(list, pendingToolCalls);
+ 
+ 		const state: SerializableAgentState = {
++			modelRequestContext: this.currentState.modelRequestContext,
++			modelRequestParentOperationId: this.currentState.modelRequestParentOperationId,
+ 			persistence: options?.persistence,
+ 			status: 'suspended',
+ 			messageList: list.serialize(),
+@@ -1371,6 +1412,7 @@
+ 		const checkpointOptions = buildCheckpointOptions(options, maxIterations, iterationCount);
+ 
+ 		const state: SerializableAgentState = {
++			modelRequestParentOperationId: this.currentState.modelRequestParentOperationId,
+ 			persistence: options?.persistence,
+ 			status: 'running',
+ 			messageList: list.serialize(),
+@@ -1378,6 +1420,7 @@
+ 			usage: totalUsage,
+ 			...checkpointOptions,
+ 		};
++		this.updateState({ modelRequestContext: undefined });
+ 		await this.runState.checkpointStep(this.runId, state);
+ 	}
+ 
+--- a/packages/@n8n/agents/src/runtime/memory/title-generation.ts
++++ b/packages/@n8n/agents/src/runtime/memory/title-generation.ts
+@@ -126,7 +126,7 @@
+ 		return null;
+ 	}
+ 
+-	const result = await loadAi().generateText({
++	const result = await loadAi('title').generateText({
+ 		model,
+ 		instructions: opts?.instructions ?? DEFAULT_TITLE_INSTRUCTIONS,
+ 		messages: [
+@@ -176,7 +176,7 @@
+ ${trimmed}
+ </conversation>`;
+ 
+-	const result = await loadAi().generateText({
++	const result = await loadAi('title').generateText({
+ 		model,
+ 		instructions: opts?.instructions ?? DEFAULT_TITLE_AND_EMOJI_INSTRUCTIONS,
+ 		messages: [{ role: 'user', content: wrappedMessage }],
+--- a/packages/@n8n/agents/src/runtime/memory/observation-log-defaults.ts
++++ b/packages/@n8n/agents/src/runtime/memory/observation-log-defaults.ts
+@@ -168,7 +168,7 @@
+ 	options: CreateObservationLogObserveFnOptions = {},
+ ): ObservationLogObserveFn {
+ 	return async (input) => {
+-		const { text, usage, finalStep } = await loadAi().generateText({
++		const { text, usage, finalStep } = await loadAi('compaction').generateText({
+ 			model: createModel(model, undefined, input.telemetry),
+ 			instructions: options.observerPrompt ?? DEFAULT_OBSERVATION_LOG_OBSERVER_PROMPT,
+ 			prompt: buildObservationLogObserverPrompt(input),
+@@ -336,7 +336,7 @@
+ 				parentId: entry.parentId ? (referenceById.get(entry.parentId) ?? null) : null,
+ 			})),
+ 		);
+-		const { text, usage, finalStep } = await loadAi().generateText({
++		const { text, usage, finalStep } = await loadAi('compaction').generateText({
+ 			model: createModel(model, undefined, input.telemetry),
+ 			instructions: options.reflectorPrompt ?? DEFAULT_OBSERVATION_LOG_REFLECTOR_PROMPT,
+ 			prompt: buildObservationLogReflectorPrompt({ ...input, renderedObservationLog }),
+--- a/packages/@n8n/agents/src/runtime/memory/episodic-memory-defaults.ts
++++ b/packages/@n8n/agents/src/runtime/memory/episodic-memory-defaults.ts
+@@ -1,3 +1,4 @@
++import { loadAi } from '../model/lazy-ai';
+ import { z } from 'zod';
+ 
+ import type {
+@@ -68,7 +69,7 @@
+ 	options: CreateEpisodicMemoryReflectFnOptions = {},
+ ): EpisodicMemoryReflectFn {
+ 	return async (input): Promise<EpisodicMemoryReflectResult> => {
+-		const { generateText, Output } = await import('ai');
++		const { generateText, Output } = loadAi('helper');
+ 		const response = await generateText({
+ 			model: createModel(model),
+ 			instructions: options.reflectionPrompt ?? DEFAULT_EPISODIC_MEMORY_REFLECTION_PROMPT,
+--- a/packages/@n8n/agents/src/runtime/model/model-factory.ts
++++ b/packages/@n8n/agents/src/runtime/model/model-factory.ts
+@@ -1,3 +1,4 @@
++import { modelRequestHooks } from './model-request-context';
+ /* eslint-disable @typescript-eslint/consistent-type-imports */
+ /* eslint-disable @typescript-eslint/no-require-imports */
+ import { splitModelId } from '@n8n/ai-utilities/agent-config';
+@@ -566,7 +567,9 @@
+ 	}
+ 
+ 	// Caller-injected transport wins; fall back to the ambient env-proxy resolver.
+-	const transport = fetch ?? getProxyFetch();
++	const originalTransport = fetch ?? getProxyFetch();
++	const transport =
++		modelRequestHooks()?.decorateFetch(originalTransport ?? globalFetch) ?? originalTransport;
+ 	const resolvedFetch = telemetry?.traceModelRequests
+ 		? traceModelRequests(transport ?? globalFetch, telemetry, provider, modelName)
+ 		: transport;
+--- /dev/null
++++ b/packages/cli/src/modules/agents/codex-wire-context.ts
+@@ -0,0 +1,78 @@
++import type { AgentTurnRequest } from './agent-turn-execution.service';
++const load = () =>
++	require('/opt/codex-wire-context/dist/integration/n8n-context.js') as {
++		installFromEnvironment(): Promise<unknown>;
++		withServerRun<T>(
++			identity: Record<string, string | number | undefined>,
++			action: () => T,
++		): Promise<Awaited<T>>;
++		registerAgentRevision(agent: object, revision: unknown): void;
++		agentRevision(agent: object): string;
++		currentParentOperationId(): string | undefined;
++	};
++export async function ensureCodexWireContext(): Promise<void> {
++	if (process.env.N8N_CODEX_CONTEXT_CONFIG_FILE) await load().installFromEnvironment();
++}
++export function registerCodexWireRevision(agent: object, revision: unknown): void {
++	if (process.env.N8N_CODEX_CONTEXT_CONFIG_FILE) load().registerAgentRevision(agent, revision);
++}
++export async function withCodexWireTurn<T>(
++	turn: AgentTurnRequest,
++	executionId: string,
++	hostIssuedAt: number,
++	agent: object,
++	action: () => T,
++): Promise<Awaited<T>> {
++	if (!process.env.N8N_CODEX_CONTEXT_CONFIG_FILE) return await action();
++	const r = turn.recording;
++	return await load().withServerRun(
++		{
++			projectId: r.projectId,
++			agentRevision: load().agentRevision(agent),
++			conversationId: r.threadId,
++			branchId: r.threadId,
++			turnId: executionId,
++			hostRunId: executionId,
++			hostIssuedAt,
++		},
++		action,
++	);
++}
++
++export async function withCodexWireWorkflow<T>(
++	identity: Record<string, string | number | undefined>,
++	agent: object,
++	action: () => T,
++): Promise<Awaited<T>> {
++	if (process.env.N8N_CODEX_CONTEXT_CONFIG_FILE && identity.hostIssuedAt === undefined) {
++		if (typeof identity.hostRunId !== 'string' || !identity.hostRunId)
++			throw new Error('A durable workflow execution is required for the matched lifecycle hook.');
++		const { Container } = await import('@n8n/di');
++		const { ExecutionRepository } = await import('@n8n/db');
++		const execution = await Container.get(ExecutionRepository).findOne({
++			where: { id: identity.hostRunId },
++			select: { startedAt: true },
++		});
++		const hostIssuedAt = execution?.startedAt?.getTime();
++		if (!Number.isSafeInteger(hostIssuedAt) || !hostIssuedAt || hostIssuedAt <= 0)
++			throw new Error('The workflow execution has no durable admission timestamp.');
++		identity = { ...identity, hostIssuedAt };
++	}
++	return await withCodexWireScope(identity, agent, action);
++}
++export function currentCodexWireParent(): string | undefined {
++	return process.env.N8N_CODEX_CONTEXT_CONFIG_FILE ? load().currentParentOperationId() : undefined;
++}
++export async function withCodexWireScope<T>(
++	identity: Record<string, string | number | undefined>,
++	agent: object,
++	action: () => T,
++): Promise<Awaited<T>> {
++	if (!process.env.N8N_CODEX_CONTEXT_CONFIG_FILE) return await action();
++	if (!identity.hostRunId)
++		throw new Error('A durable host execution is required for the matched lifecycle hook.');
++	return await load().withServerRun(
++		{ ...identity, agentRevision: load().agentRevision(agent) },
++		action,
++	);
++}
+--- a/packages/cli/src/modules/agents/agent-turn-execution.service.ts
++++ b/packages/cli/src/modules/agents/agent-turn-execution.service.ts
+@@ -1,3 +1,4 @@
++import { withCodexWireTurn } from './codex-wire-context';
+ import type {
+ 	Agent as RuntimeAgent,
+ 	ExecutionOptions,
+@@ -512,7 +513,13 @@
+ 		turn.options.onSideCallUsage = (report: SideCallUsageReport) => {
+ 			void this.agentExecutionService.recordSideCallUsage(executionId, threadId, report);
+ 		};
+-		return await this.startTurn(turn, config, recorder, state);
++		return await withCodexWireTurn(
++			turn,
++			executionId,
++			recorder.startedAt.getTime(),
++			config.agentInstance,
++			() => this.startTurn(turn, config, recorder, state),
++		);
+ 	}
+ 
+ 	private *streamStartTurnNotices(
+--- a/packages/cli/src/modules/agents/agent-runtime-reconstruction.service.ts
++++ b/packages/cli/src/modules/agents/agent-runtime-reconstruction.service.ts
+@@ -1,3 +1,4 @@
++import { ensureCodexWireContext, registerCodexWireRevision } from './codex-wire-context';
+ import {
+ 	createWriteTodosTool,
+ 	CORE_WORKSPACE_TOOL_NAMES,
+@@ -185,16 +186,15 @@
+ 	previewChat?: boolean;
+ }
+ 
+-interface RuntimeDependencies
+-	extends Omit<
+-		RuntimeReconstructionOptions,
+-		| keyof AgentRuntimeAssets
+-		| 'memoryOwnerAgentId'
+-		| 'supportsHitl'
+-		| 'allowBackgroundTasks'
+-		| 'unavailableTools'
+-		| 'previewChat'
+-	> {
++interface RuntimeDependencies extends Omit<
++	RuntimeReconstructionOptions,
++	| keyof AgentRuntimeAssets
++	| 'memoryOwnerAgentId'
++	| 'supportsHitl'
++	| 'allowBackgroundTasks'
++	| 'unavailableTools'
++	| 'previewChat'
++> {
+ 	agent: RuntimeAgent;
+ 	agentId: string;
+ 	workflowToolExecutionMode: WorkflowToolExecutionMode;
+@@ -216,16 +216,13 @@
+ }
+ 
+ async function getChatIntegrationToolServices() {
+-	const { IntegrationMessageContextService } = await import(
+-		'./integrations/integration-message-context.service.js'
+-	);
++	const { IntegrationMessageContextService } =
++		await import('./integrations/integration-message-context.service.js');
+ 	// eslint-disable-next-line import-x/no-cycle
+-	const { ChatIntegrationActionExecutor } = await import(
+-		'./integrations/integration-action-executor.js'
+-	);
+-	const { ChatIntegrationContextQueryExecutor } = await import(
+-		'./integrations/integration-context-query-executor.js'
+-	);
++	const { ChatIntegrationActionExecutor } =
++		await import('./integrations/integration-action-executor.js');
++	const { ChatIntegrationContextQueryExecutor } =
++		await import('./integrations/integration-context-query-executor.js');
+ 
+ 	return {
+ 		messageContextStore: Container.get(IntegrationMessageContextService),
+@@ -634,6 +631,7 @@
+ 		const aiMcpFetch = instrumentation?.mcpFetch ?? createAiMcpFetch(this.outboundHttp);
+ 		const webSearchFetch = createWebSearchFetch(this.outboundHttp);
+ 		const buildMcpClient = this.makeMcpClientFactory(options, aiMcpFetch, mcpServerAttributions);
++		await ensureCodexWireContext();
+ 		const reconstructed = await buildFromJson(config, toolDescriptors, {
+ 			toolExecutor,
+ 			credentialProvider,
+@@ -654,6 +652,7 @@
+ 			webSearchFetch,
+ 			previewChat,
+ 		});
++		registerCodexWireRevision(reconstructed, config);
+ 		return { agent: reconstructed, resolvedTools, mcpServerAttributions };
+ 	}
+ 
+@@ -866,9 +865,8 @@
+ 			supportsHitl,
+ 			backgroundTasksEnabled,
+ 		} = runIdentity;
+-		const { resolveWorkflowTool, buildUnavailableWorkflowTool } = await import(
+-			'./tools/workflow-tool-factory.js'
+-		);
++		const { resolveWorkflowTool, buildUnavailableWorkflowTool } =
++			await import('./tools/workflow-tool-factory.js');
+ 		const context = {
+ 			workflowLoader: Container.get(WorkflowToolWorkflowLoader),
+ 			executor: this.ephemeralNodeExecutor,
+@@ -933,9 +931,8 @@
+ 		const parentWorkspaceHandle = await this.attachWorkspace(params);
+ 		const { agent, agentId, projectId } = params;
+ 		if (await this.agentFileRepository.hasFilesForAgent(agentId)) {
+-			const { createKnowledgeRetrievalTools } = await import(
+-				'./tools/knowledge/search-knowledge.tool.js'
+-			);
++			const { createKnowledgeRetrievalTools } =
++				await import('./tools/knowledge/search-knowledge.tool.js');
+ 			agent.tool(
+ 				createKnowledgeRetrievalTools({
+ 					projectId,
+@@ -1235,12 +1232,10 @@
+ 			createCancelBackgroundJobTool,
+ 			createResumeBackgroundJobsTool,
+ 		} = await import('./background/background-job-tools.js');
+-		const { AgentBackgroundJobService } = await import(
+-			'./background/agent-background-job.service.js'
+-		);
+-		const { SubAgentBackgroundRunner } = await import(
+-			'./background/sub-agent-background-runner.js'
+-		);
++		const { AgentBackgroundJobService } =
++			await import('./background/agent-background-job.service.js');
++		const { SubAgentBackgroundRunner } =
++			await import('./background/sub-agent-background-runner.js');
+ 		const jobService = Container.get(AgentBackgroundJobService);
+ 
+ 		agent.tool(createCheckBackgroundJobsTool(jobService));
+--- a/packages/cli/src/modules/agents/agent-workflow-execution.service.ts
++++ b/packages/cli/src/modules/agents/agent-workflow-execution.service.ts
+@@ -1,3 +1,4 @@
++import { withCodexWireWorkflow } from './codex-wire-context';
+ import type {
+ 	Agent as RuntimeAgent,
+ 	BuiltAgent,
+@@ -369,12 +370,24 @@
+ 				? this.executionLevelTracer.getActiveContext(tracing.executionId, tracing.nodeName)
+ 				: undefined;
+ 			const run = async () =>
+-				await this.runWorkflowAgentStream(
+-					params,
+-					recorder,
+-					streamAdapter,
+-					state,
+-					parentCtx !== undefined,
++				await withCodexWireWorkflow(
++					{
++						projectId: params.tracing.projectId,
++						conversationId: params.threadId,
++						branchId: params.threadId,
++						turnId: params.admission?.executionId ?? params.tracing.executionId ?? '',
++						hostRunId: params.admission?.executionId ?? params.tracing.executionId ?? '',
++						hostIssuedAt: params.admission?.startedAt.getTime(),
++					},
++					params.agentInstance,
++					async () =>
++						this.runWorkflowAgentStream(
++							params,
++							recorder,
++							streamAdapter,
++							state,
++							parentCtx !== undefined,
++						),
+ 				);
+ 			if (parentCtx) {
+ 				await context.with(parentCtx, run);
+--- a/packages/cli/src/modules/agents/sub-agents/sub-agent-runner.ts
++++ b/packages/cli/src/modules/agents/sub-agents/sub-agent-runner.ts
+@@ -1,3 +1,4 @@
++import { withCodexWireScope, currentCodexWireParent } from '../codex-wire-context';
+ import {
+ 	assertSubAgentTaskPath,
+ 	deriveSubAgentTelemetry,
+@@ -66,6 +67,7 @@
+ } from './sub-agent-source-resolver';
+ 
+ export interface SubAgentRunContext {
++	modelRequestParentOperationId?: string;
+ 	projectId: string;
+ 	/** Saved n8n agent id of the delegating parent agent, used to link the child session back. */
+ 	parentAgentId: string;
+@@ -183,7 +185,14 @@
+ 		// validate the forwarded shape — don't recompute it or re-run the gates.
+ 		const taskPath = request.taskPath;
+ 		assertSubAgentTaskPath(taskPath);
+-		return await this.executeForeground({ type: 'run', request, taskPath }, context);
++		return await this.executeForeground(
++			{ type: 'run', request, taskPath },
++			{
++				...context,
++				modelRequestParentOperationId:
++					context.modelRequestParentOperationId ?? currentCodexWireParent(),
++			},
++		);
+ 	}
+ 
+ 	async resumeForeground(
+@@ -380,54 +389,69 @@
+ 			);
+ 			context.abortSignal?.throwIfAborted();
+ 			executionStarted = operation.type === 'run';
+-			let resultStream: StreamResult;
+-			if (operation.type === 'run') {
+-				resultStream = await agent.stream(
+-					bindExecutionInput(userMessage ?? '', admission.inputMessageIds),
+-					{
+-						...executionOptions,
+-						persistence: {
+-							resourceId,
+-							threadId,
+-							delegated: true,
+-							hostMetadata: {
+-								...createHostMetadata(
+-									context,
+-									operation.taskPath,
+-									runtimeSource,
+-									sandboxPrincipalHash,
+-								),
+-								[EXECUTION_METADATA_KEY]: executionId,
++			let resultStream!: StreamResult;
++			await withCodexWireScope(
++				{
++					projectId: context.projectId,
++					conversationId: threadId,
++					branchId: threadId,
++					turnId: executionId,
++					hostRunId: executionId,
++					hostIssuedAt: admission.startedAt.getTime(),
++					parentOperationId: context.modelRequestParentOperationId,
++					kind: 'subagent',
++				},
++				agent,
++				async () => {
++					if (operation.type === 'run') {
++						resultStream = await agent.stream(
++							bindExecutionInput(userMessage ?? '', admission.inputMessageIds),
++							{
++								...executionOptions,
++								persistence: {
++									resourceId,
++									threadId,
++									delegated: true,
++									hostMetadata: {
++										...createHostMetadata(
++											context,
++											operation.taskPath,
++											runtimeSource,
++											sandboxPrincipalHash,
++										),
++										[EXECUTION_METADATA_KEY]: executionId,
++									},
++								},
+ 							},
+-						},
+-					},
+-				);
+-			} else if (operation.type === 'resumePaused') {
+-				resultStream = await agent.resumePaused({
+-					...executionOptions,
+-					hostMetadata: { [EXECUTION_METADATA_KEY]: executionId },
+-					runId: operation.request.childRunId,
+-					onResumeClaimed: async () => {
+-						await context.onResumeClaimed?.();
+-						executionStarted = true;
+-					},
+-				});
+-			} else {
+-				resultStream = await agent.resume('stream', operation.request.resumeData, {
+-					...executionOptions,
+-					hostMetadata: { [EXECUTION_METADATA_KEY]: executionId },
+-					runId: operation.request.childRunId,
+-					toolCallId: operation.request.childToolCallId,
+-					onResumeClaimed: async () => {
+-						await context.onResumeClaimed?.();
+-						executionStarted = true;
+-						recorder.recordHitlResponse(
+-							operation.request.childToolCallId,
+-							operation.request.resumeData,
+ 						);
+-					},
+-				});
+-			}
++					} else if (operation.type === 'resumePaused') {
++						resultStream = await agent.resumePaused({
++							...executionOptions,
++							hostMetadata: { [EXECUTION_METADATA_KEY]: executionId },
++							runId: operation.request.childRunId,
++							onResumeClaimed: async () => {
++								await context.onResumeClaimed?.();
++								executionStarted = true;
++							},
++						});
++					} else {
++						resultStream = await agent.resume('stream', operation.request.resumeData, {
++							...executionOptions,
++							hostMetadata: { [EXECUTION_METADATA_KEY]: executionId },
++							runId: operation.request.childRunId,
++							toolCallId: operation.request.childToolCallId,
++							onResumeClaimed: async () => {
++								await context.onResumeClaimed?.();
++								executionStarted = true;
++								recorder.recordHitlResponse(
++									operation.request.childToolCallId,
++									operation.request.resumeData,
++								);
++							},
++						});
++					}
++				},
++			);
+ 			const consumed = await consumeAgentStream(
+ 				resultStream,
+ 				recorder,
+@@ -527,9 +551,8 @@
+  */
+ async function getReconstructionService() {
+ 	// eslint-disable-next-line import-x/no-cycle
+-	const { AgentRuntimeReconstructionService } = await import(
+-		'../agent-runtime-reconstruction.service.js'
+-	);
++	const { AgentRuntimeReconstructionService } =
++		await import('../agent-runtime-reconstruction.service.js');
+ 	return Container.get(AgentRuntimeReconstructionService);
+ }
+ 
+--- a/packages/cli/src/modules/agents/background/sub-agent-background-runner.ts
++++ b/packages/cli/src/modules/agents/background/sub-agent-background-runner.ts
+@@ -1,3 +1,4 @@
++import { currentCodexWireParent } from '../codex-wire-context';
+ import { createChildSubAgentTaskPath } from '@n8n/agents';
+ import type { SubAgentSource, SubAgentTaskDifficulty } from '@n8n/api-types';
+ import { Logger } from '@n8n/backend-common';
+@@ -86,6 +87,7 @@
+ 		// name cannot leave a phantom `running` row holding a thread slot.
+ 		const taskPath = createChildSubAgentTaskPath(request.taskName, this.dispatchCounter++);
+ 
++		const modelRequestParentOperationId = currentCodexWireParent();
+ 		const jobId = uuid();
+ 		const childThreadId = uuid();
+ 
+@@ -138,6 +140,7 @@
+ 					instrumentation: context.instrumentation,
+ 					abortSignal: abortController.signal,
+ 					backgroundJobId: jobId,
++					modelRequestParentOperationId,
+ 					shouldPause: async () => await this.jobService.shouldPause(jobId),
+ 					parentMessageContext: request.parentMessageContext,
+ 					// The parent thread is the root session: the child debits it, not

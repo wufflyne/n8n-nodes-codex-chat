@@ -18,7 +18,13 @@ import {
   type Session,
 } from "./types.js";
 export type TransportEvent =
-  | { kind: "text"; text: string }
+  | {
+      kind: "text";
+      text: string;
+      itemId?: string;
+      outputIndex?: number;
+      contentIndex?: number;
+    }
   | {
       kind: "completed";
       response: CompletedResponse;
@@ -45,7 +51,11 @@ export interface TransportContext {
   deadline?: number;
   affinity?: string;
   recorder?: CallRecorder;
-  onAdmission?: () => void;
+  onAdmission?: () => void | Promise<void>;
+  /** A received non-2xx response proves this attempt was rejected before admission. */
+  onRejected?: () => void;
+  onItem?: (item: Record<string, unknown>, index: number) => Promise<void>;
+  streamLimits?: { eventBytes: number; streamBytes: number };
   onRejection?: (
     rejection: { status: number; requestId?: string; retryAt?: number },
     signal: AbortSignal,
@@ -129,9 +139,10 @@ export class ResponsesTransport {
         if (response.ok) {
           admitted = true;
           context.recorder?.admitted();
-          context.onAdmission?.();
+          await context.onAdmission?.();
           break;
         }
+        context.onRejected?.();
         context.recorder?.rejected();
         const rejection = {
           status: response.status,
@@ -169,7 +180,23 @@ export class ResponsesTransport {
         response.body,
         scope.signal,
         settings.idleTimeoutMs,
+        context.streamLimits,
       )) {
+        if (
+          event.type === "response.output_item.added" &&
+          typeof event.item === "object" &&
+          event.item !== null &&
+          Number.isSafeInteger(event.output_index) &&
+          Number(event.output_index) >= 0
+        ) {
+          const item = event.item as Record<string, unknown>;
+          if (
+            ["message", "agent_message", "reasoning"].includes(
+              String(item.type),
+            )
+          )
+            await context.onItem?.(item, Number(event.output_index));
+        }
         if (event.type === "response.output_text.delta") {
           if (typeof event.delta !== "string")
             throw new CodexError(
@@ -177,7 +204,19 @@ export class ResponsesTransport {
               "The provider returned an invalid text delta.",
             );
           firstTextMs ??= performance.now() - started;
-          yield { kind: "text", text: event.delta };
+          yield {
+            kind: "text",
+            text: event.delta,
+            ...(typeof event.item_id === "string"
+              ? { itemId: event.item_id }
+              : {}),
+            ...(Number.isSafeInteger(event.output_index)
+              ? { outputIndex: Number(event.output_index) }
+              : {}),
+            ...(Number.isSafeInteger(event.content_index)
+              ? { contentIndex: Number(event.content_index) }
+              : {}),
+          };
         }
         const final = accumulator.consume(event);
         if (final) {

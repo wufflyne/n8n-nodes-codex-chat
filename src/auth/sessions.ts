@@ -1,11 +1,6 @@
+import { isProfileAccess, type ProfileAccess, type ProfileBinding } from "../service/access.js";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
-import {
-  CodexError,
-  assert,
-  checkKeys,
-  record,
-  string,
-} from "../core/errors.js";
+import { CodexError, assert, checkKeys, record, string } from "../core/errors.js";
 import { throwIfAborted, waitForSignal } from "../core/http.js";
 import {
   CODEX_CLIENT_ID,
@@ -46,6 +41,26 @@ export class AccountSessionManager {
     readonly refreshEnabled = true,
   ) {}
 
+  /** Graceful ownership transfer waits for all rotating-token commits. */
+  async settleRenewals(): Promise<void> {
+    await Promise.allSettled([...this.flights.values()]);
+  }
+
+  /** Administrator reconnection preserves the original binding hash and identity. */
+  async reconnectAuthorized(
+    access: ProfileAccess,
+    tokens: TokenSet,
+    label: string,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    assert(
+      isProfileAccess(access) && access.authority === "administrator",
+      "Administrator profile access is required for reconnection.",
+    );
+    const placeholder = { profileId: access.profileId, bindingSecret: "" };
+    await this.activate(tokens, label, placeholder, placeholder, signal, access);
+  }
+
   prepareNewProfile(): PreparedNewProfile {
     return Object.freeze({
       mode: "new",
@@ -62,18 +77,9 @@ export class AccountSessionManager {
     label: string,
     options: { bindingDurable: DurableBinding; signal?: AbortSignal },
   ): Promise<ConnectResult> {
-    assert(
-      prepared.mode === "new",
-      "A new-profile activation requires prepared mode.",
-    );
+    assert(prepared.mode === "new", "A new-profile activation requires prepared mode.");
     verifyDelivery(options.bindingDurable, prepared.binding);
-    const binding = await this.activate(
-      tokens,
-      label,
-      undefined,
-      prepared.binding,
-      options.signal,
-    );
+    const binding = await this.activate(tokens, label, undefined, prepared.binding, options.signal);
     return {
       binding,
       state: options.signal?.aborted ? "committed_after_cancel" : "connected",
@@ -102,6 +108,7 @@ export class AccountSessionManager {
     existing: Binding | undefined,
     selectedBinding: Binding,
     signal?: AbortSignal,
+    ownerAccess?: ProfileAccess,
   ): Promise<Binding> {
     throwIfAborted(signal);
     assert(
@@ -111,7 +118,7 @@ export class AccountSessionManager {
     // Snapshot before awaiting identity keys; callers cannot alter a validated candidate later.
     const snapshot = structuredClone(tokens);
     const binding = { ...selectedBinding };
-    const observed = existing ? await this.store.read(binding) : undefined;
+    const observed = existing ? await this.store.read(ownerAccess ?? binding) : undefined;
     const candidate = await waitForSignal(
       this.auth.verify(snapshot, Boolean(snapshot.refreshToken)),
       signal,
@@ -125,7 +132,7 @@ export class AccountSessionManager {
           !(await this.store.exists(binding.profileId)),
           "The prepared profile already exists. Start a new connection.",
         );
-      const previous = existing ? await this.store.read(binding) : undefined;
+      const previous = existing ? await this.store.read(ownerAccess ?? binding) : undefined;
       throwIfAborted(signal);
       assert(
         !previous || sameIdentity(previous, verifiedCandidate.identity),
@@ -140,8 +147,7 @@ export class AccountSessionManager {
         !previous ||
           previous.state === "ready" ||
           !verifiedCandidate.tokens.refreshToken ||
-          previous.tokens.refreshToken !==
-            verifiedCandidate.tokens.refreshToken,
+          previous.tokens.refreshToken !== verifiedCandidate.tokens.refreshToken,
         "This rotating token has an uncertain or revoked outcome. Reconnect using a fresh device login or independent token set.",
       );
       throwIfAborted(signal);
@@ -160,9 +166,7 @@ export class AccountSessionManager {
         await this.store.claimImportRenewal(verified.tokens.refreshToken);
         if (previous?.tokens.refreshToken === verified.tokens.refreshToken)
           await this.store.write({ ...previous, state: "refresh_uncertain" });
-        verified = await this.auth.verify(
-          await this.auth.refresh(verified.tokens),
-        );
+        verified = await this.auth.verify(await this.auth.refresh(verified.tokens));
         assert(
           sameIdentity(verifiedCandidate.identity, verified.identity),
           "Token renewal returned a different account. The profile was not replaced.",
@@ -174,7 +178,7 @@ export class AccountSessionManager {
         provider: PROVIDER,
         id: binding.profileId,
         label,
-        bindingHash: bindingHash(binding.bindingSecret),
+        bindingHash: previous?.bindingHash ?? bindingHash(binding.bindingSecret),
         generation: (previous?.generation ?? 0) + 1,
         state: "ready",
         tokens: verified.tokens,
@@ -186,7 +190,7 @@ export class AccountSessionManager {
     return binding;
   }
 
-  async session(binding: Binding, signal?: AbortSignal): Promise<Session> {
+  async session(binding: ProfileBinding, signal?: AbortSignal): Promise<Session> {
     throwIfAborted(signal);
     let profile = await this.store.read(binding);
     throwIfAborted(signal);
@@ -215,9 +219,7 @@ export class AccountSessionManager {
       if (!flight) {
         flight = this.renew(binding, profile.generation);
         this.flights.set(profile.id, flight);
-        void flight
-          .finally(() => this.flights.delete(profile.id))
-          .catch(() => undefined);
+        void flight.finally(() => this.flights.delete(profile.id)).catch(() => undefined);
       }
       // Caller cancellation never cancels the shared rotating-token operation.
       profile = await waitForSignal(flight, signal);
@@ -231,10 +233,7 @@ export class AccountSessionManager {
     return this.toSession(profile);
   }
 
-  async currentSession(
-    binding: Binding,
-    signal?: AbortSignal,
-  ): Promise<Session> {
+  async currentSession(binding: ProfileBinding, signal?: AbortSignal): Promise<Session> {
     throwIfAborted(signal);
     const profile = await this.store.read(binding);
     throwIfAborted(signal);
@@ -264,17 +263,11 @@ export class AccountSessionManager {
     };
   }
 
-  private async renew(
-    binding: Binding,
-    observedGeneration: number,
-  ): Promise<Profile> {
+  private async renew(binding: ProfileBinding, observedGeneration: number): Promise<Profile> {
     return this.store.locked(binding.profileId, async () => {
       const current = await this.store.read(binding);
       if (current.state !== "ready")
-        throw new CodexError(
-          "reconnect",
-          "The profile requires reconnection before renewal.",
-        );
+        throw new CodexError("reconnect", "The profile requires reconnection before renewal.");
       if (current.generation !== observedGeneration) return current;
       if (current.tokens.expiresAt > Date.now() + 30000) return current;
       assert(
@@ -296,11 +289,9 @@ export class AccountSessionManager {
           "Token renewal returned a different account. Reconnect this profile.",
         );
       } catch (error) {
-        const permanent =
-          error instanceof CodexError && error.category === "reconnect";
+        const permanent = error instanceof CodexError && error.category === "reconnect";
         // Preserve tokens for recovery. Unknown outcomes deliberately remain fenced against replay.
-        if (permanent)
-          await this.store.write({ ...current, state: "reconnect" });
+        if (permanent) await this.store.write({ ...current, state: "reconnect" });
         throw error;
       }
       const replacement: Profile = {
@@ -346,8 +337,7 @@ export function parseManualTokens(
     data = root;
   } else {
     assert(
-      root.OPENAI_API_KEY == null &&
-        (!root.auth_mode || root.auth_mode === "chatgpt"),
+      root.OPENAI_API_KEY == null && (!root.auth_mode || root.auth_mode === "chatgpt"),
       "This import accepts Codex ChatGPT accounts only. API keys and other auth modes are unsupported.",
     );
     data = record(root.tokens);
@@ -364,32 +354,22 @@ export function parseManualTokens(
   assert(
     data.scopes === undefined ||
       (Array.isArray(data.scopes) &&
-        data.scopes.every(
-          (scope) => typeof scope === "string" && scope.length <= 1024,
-        )),
+        data.scopes.every((scope) => typeof scope === "string" && scope.length <= 1024)),
     "Token scopes must be an array of strings.",
   );
   return {
-    accessToken: string(
-      data.access_token,
-      "Access token; refresh-only bootstrap is unsupported",
-    ),
+    accessToken: string(data.access_token, "Access token; refresh-only bootstrap is unsupported"),
     refreshToken:
       data.refresh_token == null || data.refresh_token === ""
         ? undefined
         : string(data.refresh_token, "Refresh token"),
     idToken:
-      data.id_token == null || data.id_token === ""
-        ? undefined
-        : string(data.id_token, "ID token"),
+      data.id_token == null || data.id_token === "" ? undefined : string(data.id_token, "ID token"),
     expiresAt: typeof data.expires_at === "number" ? data.expires_at * 1000 : 0,
     earliestRefreshAt:
-      typeof data.earliest_refresh_at === "number"
-        ? data.earliest_refresh_at * 1000
-        : undefined,
+      typeof data.earliest_refresh_at === "number" ? data.earliest_refresh_at * 1000 : undefined,
     scopes:
-      Array.isArray(data.scopes) &&
-      data.scopes.every((s) => typeof s === "string")
+      Array.isArray(data.scopes) && data.scopes.every((s) => typeof s === "string")
         ? (data.scopes as string[])
         : [],
   };

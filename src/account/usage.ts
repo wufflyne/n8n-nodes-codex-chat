@@ -1,3 +1,4 @@
+import type { ProfileBinding as Binding } from "../service/access.js";
 import { localStatus, planLabel } from "../auth/status.js";
 import type { AccountSessionManager } from "../auth/sessions.js";
 import { accountHeaders } from "../core/catalog.js";
@@ -11,7 +12,7 @@ import {
   type Fetch,
 } from "../core/http.js";
 import { count } from "../core/usage.js";
-import type { Binding, Session } from "../core/types.js";
+import type { Session } from "../core/types.js";
 import type {
   AccountSnapshot,
   Freshness,
@@ -21,20 +22,13 @@ import type {
 } from "./types.js";
 export const USAGE_BASE = "https://chatgpt.com/backend-api/wham";
 export const object = (v: unknown): Record<string, unknown> =>
-  v !== null && typeof v === "object" && !Array.isArray(v)
-    ? (v as Record<string, unknown>)
-    : {};
+  v !== null && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
 export const text = (v: unknown, max = 128): string | null =>
   typeof v === "string" && v.length > 0 && v.length <= max
     ? v.replace(/[\x00-\x1f\x7f]/g, "")
     : null;
 export const identifier = (v: unknown, max = 256): string | null =>
-  typeof v === "string" &&
-  v.length > 0 &&
-  v.length <= max &&
-  !/[\x00-\x20\x7f]/.test(v)
-    ? v
-    : null;
+  typeof v === "string" && v.length > 0 && v.length <= max && !/[\x00-\x20\x7f]/.test(v) ? v : null;
 const bool = (v: unknown) => (typeof v === "boolean" ? v : null);
 export function unixDate(v: unknown): string | null {
   const n = count(v);
@@ -47,10 +41,9 @@ export function unixDate(v: unknown): string | null {
 }
 export function isoDate(v: unknown): string | null {
   if (typeof v !== "string") return null;
-  const m =
-    /^(\d{4})-(\d\d)-(\d\d)T(\d\d):(\d\d):(\d\d)(?:\.\d+)?(?:Z|([+-])(\d\d):(\d\d))$/.exec(
-      v,
-    );
+  const m = /^(\d{4})-(\d\d)-(\d\d)T(\d\d):(\d\d):(\d\d)(?:\.\d+)?(?:Z|([+-])(\d\d):(\d\d))$/.exec(
+    v,
+  );
   if (!m) return null;
   const year = Number(m[1]),
     month = Number(m[2]),
@@ -85,20 +78,14 @@ export function isoDate(v: unknown): string | null {
   return new Date(v).toISOString();
 }
 
-export const freshness = (
-  source: Freshness["source"],
-  now: number,
-  ttl = 30000,
-): Freshness => ({
+export const freshness = (source: Freshness["source"], now: number, ttl = 30000): Freshness => ({
   state: "fresh",
   checkedAt: new Date(now).toISOString(),
   validUntil: new Date(now + ttl).toISOString(),
   source,
   reason: null,
 });
-export const unavailable = (
-  reason: Freshness["reason"] = "not_reported",
-): Freshness => ({
+export const unavailable = (reason: Freshness["reason"] = "not_reported"): Freshness => ({
   state: "unavailable",
   checkedAt: null,
   validUntil: null,
@@ -138,11 +125,7 @@ function bucket(
     name,
     normalModelSlug: slug,
     applicability:
-      scope === "ordinary"
-        ? "ordinary_included"
-        : slug
-          ? "explicit_model_match"
-          : "unknown",
+      scope === "ordinary" ? "ordinary_included" : slug ? "explicit_model_match" : "unknown",
     allowed: bool(b.allowed),
     limitReached: bool(b.limit_reached),
     windows: (
@@ -173,21 +156,15 @@ export function quotaDecision(
   )
     return unknown("limits_not_fresh");
   const extra = snapshot.limits.buckets.filter(
-    (b) =>
-      b.scope === "additional" && b.normalModelSlug === model && model !== null,
+    (b) => b.scope === "additional" && b.normalModelSlug === model && model !== null,
   );
   if (extra.length > 1) return unknown("conflicting_mapping");
   if (
     model !== null &&
-    snapshot.limits.buckets.some(
-      (b) => b.scope === "additional" && b.applicability === "unknown",
-    )
+    snapshot.limits.buckets.some((b) => b.scope === "additional" && b.applicability === "unknown")
   )
     return unknown("scope_unknown");
-  const relevant = [
-    ...snapshot.limits.buckets.filter((b) => b.scope === "ordinary"),
-    ...extra,
-  ];
+  const relevant = [...snapshot.limits.buckets.filter((b) => b.scope === "ordinary"), ...extra];
   if (!relevant.length) return unknown("scope_unknown");
   if (
     relevant.some((b) =>
@@ -203,16 +180,11 @@ export function quotaDecision(
     return unknown("invalid_window_data");
   if (
     relevant.some((b) =>
-      b.windows.some(
-        (w) => w.resetsAt !== null && Date.parse(w.resetsAt) <= now,
-      ),
+      b.windows.some((w) => w.resetsAt !== null && Date.parse(w.resetsAt) <= now),
     )
   )
     return unknown("window_reset_passed");
-  if (
-    snapshot.limits.reachedType !== null &&
-    snapshot.limits.reachedType !== "rate_limit_reached"
-  )
+  if (snapshot.limits.reachedType !== null && snapshot.limits.reachedType !== "rate_limit_reached")
     return unknown("spending_scope_unknown");
   const times = relevant
     .flatMap((b) => b.windows.map((w) => w.resetsAt))
@@ -285,20 +257,14 @@ export function parseUsage(
   const result = structuredClone(snapshot);
   result.limits = {
     freshness: freshness("usage_endpoint", now),
-    buckets:
-      body.rate_limit == null
-        ? []
-        : [bucket(body.rate_limit, "ordinary", "ordinary")],
+    buckets: body.rate_limit == null ? [] : [bucket(body.rate_limit, "ordinary", "ordinary")],
     reachedType: identifier(object(body.rate_limit_reached_type).type, 80),
   };
   const ids = new Set<string>();
   for (const raw of Array.isArray(extras) ? extras : []) {
     const item = record(raw),
       id = identifier(item.metered_feature);
-    assert(
-      id && !ids.has(id),
-      "The usage response contains conflicting quota buckets.",
-    );
+    assert(id && !ids.has(id), "The usage response contains conflicting quota buckets.");
     ids.add(id);
     result.limits.buckets.push(
       bucket(
@@ -319,20 +285,16 @@ export function parseUsage(
   }
   const credits = object(body.credits);
   result.credits = {
-    freshness:
-      body.credits == null ? unavailable() : freshness("usage_endpoint", now),
+    freshness: body.credits == null ? unavailable() : freshness("usage_endpoint", now),
     hasCredits: bool(credits.has_credits),
     unlimited: bool(credits.unlimited),
     balance:
-      typeof credits.balance === "string" &&
-      /^\d{1,40}(?:\.\d{1,20})?$/.test(credits.balance)
+      typeof credits.balance === "string" && /^\d{1,40}(?:\.\d{1,20})?$/.test(credits.balance)
         ? credits.balance
         : null,
     unit: null,
   };
-  result.resetCredits.availableCount = count(
-    object(body.rate_limit_reset_credits).available_count,
-  );
+  result.resetCredits.availableCount = count(object(body.rate_limit_reset_credits).available_count);
   if (result.resetCredits.availableCount !== null)
     result.resetCredits.freshness = freshness("usage_endpoint", now);
   result.routing = quotaDecision(result, snapshot.routing.model, now);
@@ -346,8 +308,7 @@ export function parseResetCredits(
 ): AccountSnapshot {
   const body = record(value);
   assert(
-    body.account_id === undefined ||
-      (session && body.account_id === session.accountId),
+    body.account_id === undefined || (session && body.account_id === session.accountId),
     "The authenticated reset allocation account identity does not match the selected profile.",
   );
   assert(
@@ -362,10 +323,7 @@ export function parseResetCredits(
       id = identifier(c.id),
       type = identifier(c.reset_type, 80),
       status = identifier(c.status, 80);
-    assert(
-      id && type && status,
-      "Reset allocation identity or type is invalid.",
-    );
+    assert(id && type && status, "Reset allocation identity or type is invalid.");
     const encoded = JSON.stringify(c);
     if (seen.has(id) && seen.get(id) !== encoded) duplicates.add(id);
     seen.set(id, encoded);
@@ -380,8 +338,7 @@ export function parseResetCredits(
             ? "not_available"
             : !grantedAt || Date.parse(grantedAt) > now + 30000
               ? "invalid_grant"
-              : c.expires_at !== null &&
-                  (!expiresAt || Date.parse(expiresAt) <= now)
+              : c.expires_at !== null && (!expiresAt || Date.parse(expiresAt) <= now)
                 ? "expired_or_invalid"
                 : null;
     return {
@@ -405,9 +362,7 @@ export function parseResetCredits(
     freshness: freshness("reset_endpoint", now),
     availableCount: count(body.available_count),
     detailsComplete: null,
-    entries: entries.filter(
-      (e, i) => entries.findIndex((x) => x.id === e.id) === i,
-    ),
+    entries: entries.filter((e, i) => entries.findIndex((x) => x.id === e.id) === i),
   };
   return result;
 }
@@ -430,8 +385,7 @@ export class AccountReader {
   /** Decision boundaries need new reads; detached older waiters keep their own result. */
   invalidateBeforeFreshRead(session: Session): void {
     const prefix = `${session.affinity}:`;
-    for (const key of this.cache.keys())
-      if (key.startsWith(prefix)) this.cache.delete(key);
+    for (const key of this.cache.keys()) if (key.startsWith(prefix)) this.cache.delete(key);
     for (const pendingKey of this.pending.keys())
       if (pendingKey.startsWith(prefix)) this.pending.delete(pendingKey);
   }
@@ -451,11 +405,7 @@ export class AccountReader {
       model?: string;
     } = {},
   ): Promise<AccountSnapshot> {
-    const session = await this.session(
-      binding,
-      options.access ?? "managed",
-      options.signal,
-    );
+    const session = await this.session(binding, options.access ?? "managed", options.signal);
     if (options.afterRejection) this.invalidateBeforeFreshRead(session);
     return this.readWithSession(binding, session, {
       ...options,
@@ -477,16 +427,12 @@ export class AccountReader {
       key = `${session.affinity}:${session.generation}`;
     let entry = this.cache.get(key);
     if (!entry) {
-      if (this.cache.size >= 128)
-        this.cache.delete(this.cache.keys().next().value!);
+      if (this.cache.size >= 128) this.cache.delete(this.cache.keys().next().value!);
       entry = {};
       this.cache.set(key, entry);
     }
     const cached = entry.snapshot;
-    let snapshot = emptySnapshot(
-      await this.readLocalStatus(binding),
-      options.model ?? null,
-    );
+    let snapshot = emptySnapshot(await this.readLocalStatus(binding), options.model ?? null);
     const cachedValid =
       cached &&
       cached.limits.freshness.validUntil &&
@@ -505,15 +451,13 @@ export class AccountReader {
           session,
           this.clock(),
         );
-        if (this.cache.get(key) === entry)
-          entry.snapshot = structuredClone(snapshot);
+        if (this.cache.get(key) === entry) entry.snapshot = structuredClone(snapshot);
       } catch (error) {
         this.checkReadError(error);
         snapshot.limits.freshness = unavailable(
           error instanceof CodexError && /identity/.test(error.message)
             ? "identity_mismatch"
-            : error instanceof CodexError &&
-                ["protocol", "configuration"].includes(error.category)
+            : error instanceof CodexError && ["protocol", "configuration"].includes(error.category)
               ? "invalid_data"
               : "read_failed",
         );
@@ -522,12 +466,7 @@ export class AccountReader {
     if (options.includeResetDetails)
       try {
         snapshot = parseResetCredits(
-          await this.get(
-            session,
-            "rate-limit-reset-credits",
-            options.signal,
-            true,
-          ),
+          await this.get(session, "rate-limit-reset-credits", options.signal, true),
           snapshot,
           this.clock(),
           session,
@@ -539,19 +478,13 @@ export class AccountReader {
         snapshot.resetCredits.entries = [];
       }
     throwIfAborted(options.signal);
-    snapshot.routing = quotaDecision(
-      snapshot,
-      options.model ?? null,
-      this.clock(),
-    );
+    snapshot.routing = quotaDecision(snapshot, options.model ?? null, this.clock());
     return structuredClone(snapshot);
   }
   private checkReadError(error: unknown) {
     if (
       error instanceof CodexError &&
-      ["authentication", "reconnect", "storage", "cancelled"].includes(
-        error.category,
-      )
+      ["authentication", "reconnect", "storage", "cancelled"].includes(error.category)
     )
       throw error;
   }
@@ -588,10 +521,7 @@ export class AccountReader {
       return await readJson(response, 256 * 1024, scope.signal);
     } catch (error) {
       if (error instanceof CodexError) throw error;
-      throw new CodexError(
-        "provider",
-        "Account information could not be read.",
-      );
+      throw new CodexError("provider", "Account information could not be read.");
     } finally {
       scope.close();
     }

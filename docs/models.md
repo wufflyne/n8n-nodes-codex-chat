@@ -37,3 +37,5 @@ Manual reset and optional same-account automatic recovery have separate [earned-
 **Codex Image** uses the fixed Codex account ImagesClient endpoint and source-pinned `gpt-image-2` action. It returns one native binary item per input item. Input validation and binary delivery are tested with synthetic providers; current real-account image generation remains unverified.
 
 Automatic reset and internal account switching are unavailable because an image-specific quota/reset mapping is unverified. A new workflow retry or execution can generate another image. For delivery, use the main flow or Respond to Webhook. Workflow Tool commonly serializes JSON only, so the bundled tool example returns metadata while its Webhook branch returns bytes. Inline Agent chat attachment rendering is not promised. Image editing is outside this release.
+
+By [wufflyne](https://wufflyne.com).

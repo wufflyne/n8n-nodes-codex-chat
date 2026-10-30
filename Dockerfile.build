@@ -10,6 +10,10 @@ COPY --chown=node:node tsconfig.json ./
 COPY --chown=node:node src ./src
 COPY --chown=node:node scripts ./scripts
 COPY --chown=node:node test ./test
+COPY --chown=node:node integration ./integration
+COPY --chown=node:node Dockerfile.gateway compose.gateway.example.yaml ./
+RUN npm ci --prefix integration/consumer --ignore-scripts --no-audit --no-fund
+ENV CODEX_WIRE_SDK_ROOT=/build/integration/consumer/node_modules
 COPY --chown=node:node README.md LICENSE compatibility.json ./
 COPY --chown=node:node docs ./docs
 COPY --chown=node:node examples ./examples

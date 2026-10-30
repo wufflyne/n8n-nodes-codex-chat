@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { nativeService } from "../../service/native.js";
 import {
   NodeConnectionTypes,
   NodeOperationError,
@@ -9,10 +9,9 @@ import {
   type ILoadOptionsFunctions,
   type INodeListSearchResult,
 } from "n8n-workflow";
-import { credentialBinding, runtime } from "../../runtime.js";
+import { credentialBinding } from "../../runtime.js";
 import { assert, safeError } from "../../core/errors.js";
 import { executionKey } from "../../core/affinity.js";
-import { executionUsage } from "../../core/execution-usage.js";
 import { nativeContext } from "../../n8n/context.js";
 import { DEFAULT_RECOVERY } from "../../account/types.js";
 export class CodexAccount implements INodeType {
@@ -117,10 +116,8 @@ export class CodexAccount implements INodeType {
   };
   methods = {
     listSearch: {
-      async resetCredits(
-        this: ILoadOptionsFunctions,
-      ): Promise<INodeListSearchResult> {
-        const snapshot = await runtime().account.readAccount(
+      async resetCredits(this: ILoadOptionsFunctions): Promise<INodeListSearchResult> {
+        const snapshot = await nativeService().limits(
           credentialBinding(await this.getCredentials("codexAccount")),
           { force: true, includeResetDetails: true },
         );
@@ -140,31 +137,22 @@ export class CodexAccount implements INodeType {
     const operation = this.getNodeParameter("operation", 0) as string,
       items = this.getInputData();
     assert(
-      !["useResetCredit", "resolvePendingReset"].includes(operation) ||
-        items.length === 1,
+      !["useResetCredit", "resolvePendingReset"].includes(operation) || items.length === 1,
       "Reset actions accept one input item only.",
     );
-    const binding = credentialBinding(
-        await this.getCredentials("codexAccount"),
-      ),
-      rt = runtime(),
+    const binding = credentialBinding(await this.getCredentials("codexAccount")),
+      service = nativeService(),
       results: INodeExecutionData[] = [];
     for (let i = 0; i < items.length; i++)
       try {
         let value: unknown;
         const signal = this.getExecutionCancelSignal();
-        if (operation === "checkAccount")
-          value = await rt.account.readLocalStatus(binding);
+        if (operation === "checkAccount") value = await service.status(binding);
         else if (operation === "getExecutionUsage") {
-          const profile = await rt.store.read(binding),
-            affinity = createHash("sha256")
-              .update(`${profile.id}:${profile.subject}:${profile.accountId}`)
-              .digest("hex");
-          value = executionUsage(nativeContext(this), affinity);
+          value = await service.usage(binding, nativeContext(this));
         } else if (operation === "getModels") {
-          const session = await rt.sessions.session(binding, signal),
-            models = await rt.catalog.list(session, signal, true),
-            account = await rt.account.readLocalStatus(binding);
+          const models = await service.models(binding, signal, true),
+            account = await service.status(binding);
           value = {
             schemaVersion: 1,
             operation,
@@ -172,11 +160,8 @@ export class CodexAccount implements INodeType {
             account: account.account,
             models,
           };
-        } else if (
-          operation === "getLimits" ||
-          operation === "listResetCredits"
-        ) {
-          value = await rt.account.readAccount(binding, {
+        } else if (operation === "getLimits" || operation === "listResetCredits") {
+          value = await service.limits(binding, {
             force: true,
             signal,
             includeResetDetails:
@@ -185,29 +170,32 @@ export class CodexAccount implements INodeType {
           });
           (value as { operation: string }).operation = operation;
         } else if (operation === "useResetCredit")
-          value = await rt.resets.consumeReset(binding, {
-            origin: "manual",
-            executionKey: executionKey(nativeContext(this)),
-            selectedCreditId: this.getNodeParameter("resetCredit", i, "", {
-              extractValue: true,
-            }) as string,
-            acknowledgement:
-              this.getNodeParameter("acknowledgement", i, false) === true,
-            policy: {
-              ...DEFAULT_RECOVERY,
-              maxPer24Hours: this.getNodeParameter(
-                "maxPer24Hours",
-                i,
-                1,
-              ) as number,
+          value = await service.reset(
+            binding,
+            {
+              origin: "manual",
+              executionKey: executionKey(nativeContext(this)),
+              selectedCreditId: this.getNodeParameter("resetCredit", i, "", {
+                extractValue: true,
+              }) as string,
+              acknowledgement: this.getNodeParameter("acknowledgement", i, false) === true,
+              policy: {
+                ...DEFAULT_RECOVERY,
+                maxPer24Hours: this.getNodeParameter("maxPer24Hours", i, 1) as number,
+              },
+              signal,
             },
-            signal,
-          });
+            nativeContext(this),
+          );
         else if (operation === "resolvePendingReset")
-          value = await rt.resets.resolvePendingReset(binding, {
-            executionKey: executionKey(nativeContext(this)),
-            signal,
-          });
+          value = await service.reconcile(
+            binding,
+            {
+              executionKey: executionKey(nativeContext(this)),
+              signal,
+            },
+            nativeContext(this),
+          );
         else assert(false, "Choose a supported Codex Account operation.");
         results.push({
           json: value as INodeExecutionData["json"],

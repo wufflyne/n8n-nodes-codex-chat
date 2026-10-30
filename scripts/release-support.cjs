@@ -6,8 +6,14 @@ const { createHash, randomUUID } = require("node:crypto");
 const { pipeline } = require("node:stream/promises");
 
 const PRIVATE_ENTRIES = new Set([
-  ".git", "node_modules", "dist", "artifacts", ".npm-cache", ".test-state",
-  "profiles", "secrets",
+  ".git",
+  "node_modules",
+  "dist",
+  "artifacts",
+  ".npm-cache",
+  ".test-state",
+  "profiles",
+  "secrets",
 ]);
 async function hash(file) {
   const digest = createHash("sha256");
@@ -20,13 +26,14 @@ async function sourceInventory(directory, relative = "") {
   for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
     if (
       PRIVATE_ENTRIES.has(entry.name) ||
-      (entry.name !== ".env.example" &&
-        entry.name.startsWith(".env"))
-    ) continue;
+      (entry.name !== ".env.example" && entry.name.startsWith(".env"))
+    )
+      continue;
     const name = path.join(relative, entry.name);
     const full = path.join(directory, entry.name);
-    if (entry.isDirectory()) rows.push(...await sourceInventory(full, name));
-    else if (entry.isFile()) rows.push({ path: name, sha256: await hash(full) });
+    if (entry.isDirectory()) rows.push(...(await sourceInventory(full, name)));
+    else if (entry.isFile())
+      rows.push({ path: name, sha256: await hash(full) });
   }
   return rows;
 }
@@ -64,7 +71,12 @@ function prepareImageTags(run, image, tags) {
   const missing = [];
   for (const tag of new Set(tags)) {
     const existing = run([
-      "image", "ls", "--quiet", "--no-trunc", "--filter", `reference=${tag}`,
+      "image",
+      "ls",
+      "--quiet",
+      "--no-trunc",
+      "--filter",
+      `reference=${tag}`,
     ]);
     if (existing && existing !== imageId)
       throw Error(
@@ -82,7 +94,7 @@ function validatePackageEntries(entries) {
     if (
       entry.includes("..") ||
       entry.includes("\\") ||
-      !/^package\/(?:package\.json|README\.md|LICENSE|compatibility\.json|dist\/[A-Za-z0-9_./-]+\.(?:js|d\.ts|svg)|docs\/[A-Za-z0-9_-]+\.md|examples\/[A-Za-z0-9_-]+\.(?:json|cjs))$/.test(
+      !/^package\/(?:package\.json|README\.md|LICENSE|compatibility\.json|Dockerfile\.gateway|compose\.gateway\.example\.yaml|dist\/[A-Za-z0-9_./-]+\.(?:js|d\.ts|svg)|dist\/gateway\/console\/(?:index\.html|console\.css)|dist\/integration\/context-build\.json|integration\/n8n-2\.45\.6\/(?:manifest\.json|model-request-context\.patch)|integration\/scripts\/build-overlay\.cjs|docs\/[A-Za-z0-9_-]+\.md|examples\/[A-Za-z0-9_-]+\.(?:json|cjs))$/.test(
         entry,
       )
     )
@@ -98,10 +110,23 @@ function validatePackageEntries(entries) {
     if (!entries.includes(required))
       throw Error("The local package is missing a required runtime entry.");
 }
-async function exportImageArchive({ docker, image, images = [image], archive, cwd, spawnImpl }) {
-  if (!images.length || images.some((tag) =>
-    typeof tag !== "string" || !/^[a-z0-9][a-z0-9_.-]*:[A-Za-z0-9_][A-Za-z0-9_.-]*$/.test(tag)
-  )) throw Error("Export requires explicit local image tags.");
+async function exportImageArchive({
+  docker,
+  image,
+  images = [image],
+  archive,
+  cwd,
+  spawnImpl,
+}) {
+  if (
+    !images.length ||
+    images.some(
+      (tag) =>
+        typeof tag !== "string" ||
+        !/^[a-z0-9][a-z0-9_.-]*:[A-Za-z0-9_][A-Za-z0-9_.-]*$/.test(tag),
+    )
+  )
+    throw Error("Export requires explicit local image tags.");
   const spawn = spawnImpl ?? require("node:child_process").spawn;
   const temporary = `${archive}.${randomUUID()}.tmp`;
   let child, transfer;
@@ -113,21 +138,33 @@ async function exportImageArchive({ docker, image, images = [image], archive, cw
     child.stderr.resume();
     const completed = new Promise((resolve, reject) => {
       child.once("error", reject);
-      child.once("close", (code) => code === 0 ? resolve() : reject(Error("export failed")));
+      child.once("close", (code) =>
+        code === 0 ? resolve() : reject(Error("export failed")),
+      );
     });
-    const destination = createWriteStream(temporary, { flags: "wx", mode: 0o600 });
+    const destination = createWriteStream(temporary, {
+      flags: "wx",
+      mode: 0o600,
+    });
     transfer = pipeline(child.stdout, destination);
     await Promise.all([transfer, completed]);
     await fs.rename(temporary, archive);
   } catch {
     child?.kill();
     await transfer?.catch(() => undefined);
-    throw Error("Local image archive export failed; any previous archive was preserved.");
+    throw Error(
+      "Local image archive export failed; any previous archive was preserved.",
+    );
   } finally {
     await fs.rm(temporary, { force: true }).catch(() => undefined);
   }
 }
 module.exports = {
-  hash, sourceInventory, releaseNames, releaseImages, prepareImageTags,
-  validatePackageEntries, exportImageArchive,
+  hash,
+  sourceInventory,
+  releaseNames,
+  releaseImages,
+  prepareImageTags,
+  validatePackageEntries,
+  exportImageArchive,
 };

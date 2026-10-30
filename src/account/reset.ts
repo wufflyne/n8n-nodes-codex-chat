@@ -1,27 +1,14 @@
+import type { ProfileBinding as Binding } from "../service/access.js";
 import { createHash, randomUUID } from "node:crypto";
 import { accountHeaders } from "../core/catalog.js";
 import { assert, CodexError, record } from "../core/errors.js";
-import {
-  readJson,
-  requestScope,
-  throwIfAborted,
-  type Fetch,
-} from "../core/http.js";
-import type { Binding, Session } from "../core/types.js";
+import { readJson, requestScope, throwIfAborted, type Fetch } from "../core/http.js";
+import type { Session } from "../core/types.js";
 import { count } from "../core/usage.js";
 import { AccountReader, USAGE_BASE } from "./usage.js";
-import {
-  ResetStore,
-  actorFingerprint,
-  type ResetIntent,
-} from "./reset-store.js";
+import { ResetStore, actorFingerprint, type ResetIntent } from "./reset-store.js";
 import { resetEligibility, validateRecovery } from "./reset-policy.js";
-import type {
-  AccountSnapshot,
-  RecoveryPolicy,
-  ResetResult,
-  ResetOutcome,
-} from "./types.js";
+import type { AccountSnapshot, RecoveryPolicy, ResetResult, ResetOutcome } from "./types.js";
 export class ResetController {
   constructor(
     readonly reader: AccountReader,
@@ -57,22 +44,14 @@ export class ResetController {
       /^[a-f0-9]{64}$/.test(options.executionKey),
       "A public workflow execution identity is required for reset coordination.",
     );
-    const session = await this.reader.session(
-      binding,
-      "managed",
-      options.signal,
-    );
-    assert(
-      session.identity,
-      "Verified account identity is required to use an earned reset.",
-    );
+    const session = await this.reader.session(binding, "managed", options.signal);
+    assert(session.identity, "Verified account identity is required to use an earned reset.");
     const scope = this.store.scope(session.identity),
       actor = actorFingerprint(session.identity);
     let snapshot = await this.reader.readWithSession(binding, session, {
       signal: options.signal,
       force: true,
-      includeResetDetails:
-        options.origin === "manual" || options.policy.automatic,
+      includeResetDetails: options.origin === "manual" || options.policy.automatic,
     });
     const result = this.result(snapshot, options.origin);
     if (options.origin === "automatic" && !options.policy.automatic) {
@@ -108,10 +87,7 @@ export class ResetController {
     let finalIntent: ResetIntent | undefined;
     try {
       await this.store.accountLock(scope, async () => {
-        const current = await this.reader.sessions.currentSession(
-          binding,
-          options.signal,
-        );
+        const current = await this.reader.sessions.currentSession(binding, options.signal);
         assert(
           current.generation === session.generation &&
             current.identity &&
@@ -177,9 +153,7 @@ export class ResetController {
         };
         if (
           journal.actions.some(
-            (a) =>
-              a !== prepared &&
-              ["uncertain", "dispatching", "prepared"].includes(a.state),
+            (a) => a !== prepared && ["uncertain", "dispatching", "prepared"].includes(a.state),
           )
         ) {
           await cancel("pending_action");
@@ -187,10 +161,7 @@ export class ResetController {
         }
         if (
           journal.actions.filter(
-            (a) =>
-              a !== prepared &&
-              a.dispatchCount > 0 &&
-              now - a.createdAt < 86400000,
+            (a) => a !== prepared && a.dispatchCount > 0 && now - a.createdAt < 86400000,
           ).length >= options.policy.maxPer24Hours
         ) {
           await cancel("cap_reached");
@@ -201,8 +172,7 @@ export class ResetController {
             (a) =>
               a !== prepared &&
               a.dispatchCount > 0 &&
-              (a.trigger === prepared.trigger ||
-                now - (a.lastAttemptAt ?? a.createdAt) < 300000),
+              (a.trigger === prepared.trigger || now - (a.lastAttemptAt ?? a.createdAt) < 300000),
           )
         ) {
           await cancel("cooldown");
@@ -235,11 +205,7 @@ export class ResetController {
         await this.store.writeLedger(journal);
         // Cancellation after durable dispatch is an uncertain external effect; persist its fence.
         try {
-          const response = await this.consume(
-            current,
-            prepared,
-            options.signal,
-          );
+          const response = await this.consume(current, prepared, options.signal);
           prepared.outcome = response.outcome;
           prepared.windowsReset = response.windowsReset;
           prepared.state = "terminal";
@@ -265,10 +231,7 @@ export class ResetController {
             await this.store.writeLedger(ledger);
           }
         });
-      } else if (
-        finalIntent.state !== "terminal" &&
-        finalIntent.state !== "cancelled_before_send"
-      )
+      } else if (finalIntent.state !== "terminal" && finalIntent.state !== "cancelled_before_send")
         finalIntent.state = "uncertain";
     }
     if (finalIntent)
@@ -292,15 +255,8 @@ export class ResetController {
       /^[a-f0-9]{64}$/.test(options.executionKey),
       "A public workflow execution identity is required for reset reconciliation.",
     );
-    const session = await this.reader.session(
-      binding,
-      "managed",
-      options.signal,
-    );
-    assert(
-      session.identity,
-      "Verified account identity is required to resolve a reset.",
-    );
+    const session = await this.reader.session(binding, "managed", options.signal);
+    assert(session.identity, "Verified account identity is required to resolve a reset.");
     const scope = this.store.scope(session.identity),
       actor = actorFingerprint(session.identity);
     let snapshot = await this.reader.readWithSession(binding, session, {
@@ -316,10 +272,7 @@ export class ResetController {
     );
     let currentExecutionReserved = false;
     if (observed && observed.state !== "prepared") {
-      assert(
-        observed.actor === actor,
-        "Pending reset belongs to a different authenticated actor.",
-      );
+      assert(observed.actor === actor, "Pending reset belongs to a different authenticated actor.");
       if (observed.attemptExecutions?.includes(options.executionKey)) {
         result.action.reason = "cooldown";
         return this.finish(binding, session, snapshot, result, observed);
@@ -328,20 +281,11 @@ export class ResetController {
         result.action.reason = "pending_action";
         return this.finish(binding, session, snapshot, result, observed);
       }
-      if (
-        this.clock() - (observed.lastAttemptAt ?? observed.createdAt) <
-        30000
-      ) {
+      if (this.clock() - (observed.lastAttemptAt ?? observed.createdAt) < 30000) {
         result.action.reason = "cooldown";
         return this.finish(binding, session, snapshot, result, observed);
       }
-      if (
-        !(await this.store.reserve(
-          options.executionKey,
-          scope,
-          observed.redeemRequestId,
-        ))
-      ) {
+      if (!(await this.store.reserve(options.executionKey, scope, observed.redeemRequestId))) {
         result.action.reason = "cap_reached";
         return this.finish(binding, session, snapshot, result, observed);
       }
@@ -360,10 +304,7 @@ export class ResetController {
         !observed || observed.redeemRequestId === intent.redeemRequestId,
         "The pending reset changed before reconciliation. Start a new execution.",
       );
-      assert(
-        intent.actor === actor,
-        "Pending reset belongs to a different authenticated actor.",
-      );
+      assert(intent.actor === actor, "Pending reset belongs to a different authenticated actor.");
       const reservation = await this.store.reservation(intent.executionKey);
       assert(
         reservation &&
@@ -388,10 +329,7 @@ export class ResetController {
         result.action.reason = "cooldown";
         return;
       }
-      const current = await this.reader.sessions.currentSession(
-        binding,
-        options.signal,
-      );
+      const current = await this.reader.sessions.currentSession(binding, options.signal);
       assert(
         current.identity && actorFingerprint(current.identity) === actor,
         "The authenticated actor changed before reconciliation.",
@@ -444,12 +382,8 @@ export class ResetController {
               profileId: binding.profileId,
               executionKey: reservation.key,
               origin: "automatic",
-              policyHash: createHash("sha256")
-                .update("orphan-recovery-v1")
-                .digest("hex"),
-              trigger: createHash("sha256")
-                .update("never-dispatched")
-                .digest("hex"),
+              policyHash: createHash("sha256").update("orphan-recovery-v1").digest("hex"),
+              trigger: createHash("sha256").update("never-dispatched").digest("hex"),
               createdAt: this.clock(),
               lastAttemptAt: null,
               dispatchCount: 0,
@@ -492,8 +426,7 @@ export class ResetController {
             : "dispatched",
       );
     if (currentExecutionReserved && observed) {
-      const dispatched =
-        intent?.attemptExecutions?.includes(options.executionKey) ?? false;
+      const dispatched = intent?.attemptExecutions?.includes(options.executionKey) ?? false;
       await this.store.updateReservation(
         options.executionKey,
         scope,
@@ -514,34 +447,26 @@ export class ResetController {
   ): Promise<{ outcome: ResetOutcome; windowsReset: number | null }> {
     const scope = requestScope([signal], 10000);
     try {
-      const response = await this.fetchImpl(
-        `${this.baseUrl}/rate-limit-reset-credits/consume`,
-        {
-          method: "POST",
-          redirect: "error",
-          signal: scope.signal,
-          headers: {
-            ...accountHeaders(session),
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            redeem_request_id: intent.redeemRequestId,
-            credit_id: intent.creditId,
-          }),
+      const response = await this.fetchImpl(`${this.baseUrl}/rate-limit-reset-credits/consume`, {
+        method: "POST",
+        redirect: "error",
+        signal: scope.signal,
+        headers: {
+          ...accountHeaders(session),
+          "Content-Type": "application/json",
         },
-      );
+        body: JSON.stringify({
+          redeem_request_id: intent.redeemRequestId,
+          credit_id: intent.creditId,
+        }),
+      });
       if (!response.ok) {
         void response.body?.cancel().catch(() => undefined);
-        throw new CodexError(
-          "provider",
-          "The reset outcome could not be established.",
-        );
+        throw new CodexError("provider", "The reset outcome could not be established.");
       }
       const data = record(await readJson(response, 256 * 1024, scope.signal));
       assert(
-        ["reset", "nothing_to_reset", "no_credit", "already_redeemed"].includes(
-          String(data.code),
-        ),
+        ["reset", "nothing_to_reset", "no_credit", "already_redeemed"].includes(String(data.code)),
         "The reset response has an unknown outcome.",
       );
       assert(
@@ -558,14 +483,10 @@ export class ResetController {
       scope.close();
     }
   }
-  private result(
-    s: AccountSnapshot,
-    origin: ResetResult["action"]["origin"],
-  ): ResetResult {
+  private result(s: AccountSnapshot, origin: ResetResult["action"]["origin"]): ResetResult {
     return {
       schemaVersion: 1,
-      operation:
-        origin === "reconcile" ? "resolvePendingReset" : "useResetCredit",
+      operation: origin === "reconcile" ? "resolvePendingReset" : "useResetCredit",
       checkedAt: new Date(this.clock()).toISOString(),
       account: s.account,
       limits: s.limits,
@@ -599,8 +520,7 @@ export class ResetController {
           force: true,
           includeResetDetails: true,
         });
-        result.action.limitsRefreshed =
-          snapshot.limits.freshness.state === "fresh";
+        result.action.limitsRefreshed = snapshot.limits.freshness.state === "fresh";
       } catch {
         /* A definite action remains definite even if its refresh fails. */
         snapshot = structuredClone(snapshot);

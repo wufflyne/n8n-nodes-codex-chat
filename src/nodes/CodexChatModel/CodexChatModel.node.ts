@@ -14,19 +14,15 @@ import {
   type ISupplyDataFunctions,
   type SupplyData,
 } from "n8n-workflow";
-import { CodexChatModel as ChatModel } from "../../model.js";
-import { localStatus } from "../../auth/status.js";
+import { serviceModel } from "../../adapters/langchain/service-model.js";
+import { nativeService } from "../../service/native.js";
 import { nativeContext } from "../../n8n/context.js";
 import { CodexTracing } from "../../n8n/tracing.js";
-import {
-  promptCacheProperty,
-  recoveryProperty,
-  recoveryPolicy,
-} from "../../n8n/options.js";
+import { promptCacheProperty, recoveryProperty, recoveryPolicy } from "../../n8n/options.js";
 import type { AffinityPolicy } from "../../core/affinity.js";
 import { ReplayLedger } from "../../core/replay.js";
 import { assert } from "../../core/errors.js";
-import { credentialBinding, runtime } from "../../runtime.js";
+import { credentialBinding } from "../../runtime.js";
 import { safeError } from "../../core/errors.js";
 import type { ModelSettings } from "../../core/types.js";
 
@@ -34,14 +30,10 @@ const executionReplays = new Map<string, ReplayLedger>();
 
 async function selectedModel(ctx: ILoadOptionsFunctions) {
   const binding = credentialBinding(await ctx.getCredentials("codexAccount"));
-  const rt = runtime();
-  const session = await rt.sessions.session(binding);
-  const parameter = ctx.getNodeParameter("model", "") as
-    | { value?: string }
-    | string;
-  const slug =
-    typeof parameter === "string" ? parameter : (parameter.value ?? "");
-  return rt.catalog.model(session, slug);
+  const service = nativeService();
+  const parameter = ctx.getNodeParameter("model", "") as { value?: string } | string;
+  const slug = typeof parameter === "string" ? parameter : (parameter.value ?? "");
+  return (await service.resolve(binding, slug)).model;
 }
 
 const reliability: INodeProperties = {
@@ -66,8 +58,7 @@ const reliability: INodeProperties = {
       type: "number",
       default: 90,
       typeOptions: { minValue: 1, maxValue: 3600 },
-      description:
-        "Maximum time without provider bytes; must not exceed the overall timeout",
+      description: "Maximum time without provider bytes; must not exceed the overall timeout",
     },
     {
       displayName: "Retry Attempts",
@@ -96,8 +87,7 @@ export class CodexChatModel implements INodeType {
     icon: "file:codex.svg",
     group: ["transform"],
     version: 1,
-    description:
-      "An independent, experimental Codex subscription integration for self-hosted n8n.",
+    description: "An independent, experimental Codex subscription integration for self-hosted n8n.",
     defaults: { name: "Codex Chat Model" },
     inputs: [],
     outputs: [NodeConnectionTypes.AiLanguageModel],
@@ -109,9 +99,7 @@ export class CodexChatModel implements INodeType {
         "Language Models": ["Chat Models"],
       },
     },
-    credentials: [
-      { name: "codexAccount", required: true, testedBy: "testProfileBinding" },
-    ],
+    credentials: [{ name: "codexAccount", required: true, testedBy: "testProfileBinding" }],
     properties: [
       {
         displayName:
@@ -160,8 +148,7 @@ export class CodexChatModel implements INodeType {
               loadOptionsMethod: "reasoningEfforts",
               loadOptionsDependsOn: ["model"],
             },
-            description:
-              "Only efforts advertised by the selected model are available",
+            description: "Only efforts advertised by the selected model are available",
           },
           {
             displayName: "Summary",
@@ -222,19 +209,13 @@ export class CodexChatModel implements INodeType {
         this: ILoadOptionsFunctions,
         filter?: string,
       ): Promise<INodeListSearchResult> {
-        const rt = runtime();
-        const session = await rt.sessions.session(
+        const models = await nativeService().models(
           credentialBinding(await this.getCredentials("codexAccount")),
         );
-        const models = await rt.catalog.list(session);
         return {
           results: models
             .filter(
-              (m) =>
-                !filter ||
-                `${m.name} ${m.slug}`
-                  .toLowerCase()
-                  .includes(filter.toLowerCase()),
+              (m) => !filter || `${m.name} ${m.slug}`.toLowerCase().includes(filter.toLowerCase()),
             )
             .map((m) => ({
               name: m.name,
@@ -255,9 +236,7 @@ export class CodexChatModel implements INodeType {
       },
     },
     loadOptions: {
-      async reasoningEfforts(
-        this: ILoadOptionsFunctions,
-      ): Promise<INodePropertyOptions[]> {
+      async reasoningEfforts(this: ILoadOptionsFunctions): Promise<INodePropertyOptions[]> {
         return [
           { name: "Provider Default (No Override)", value: "" },
           ...(await selectedModel(this)).reasoningEfforts.map((e) => ({
@@ -266,9 +245,7 @@ export class CodexChatModel implements INodeType {
           })),
         ];
       },
-      async reasoningSummaries(
-        this: ILoadOptionsFunctions,
-      ): Promise<INodePropertyOptions[]> {
+      async reasoningSummaries(this: ILoadOptionsFunctions): Promise<INodePropertyOptions[]> {
         return [
           { name: "Provider Default (No Override)", value: "" },
           ...((await selectedModel(this)).supportsSummary
@@ -279,9 +256,7 @@ export class CodexChatModel implements INodeType {
             : []),
         ];
       },
-      async serviceTiers(
-        this: ILoadOptionsFunctions,
-      ): Promise<INodePropertyOptions[]> {
+      async serviceTiers(this: ILoadOptionsFunctions): Promise<INodePropertyOptions[]> {
         return [
           { name: "Account Default (No Override)", value: "" },
           ...(await selectedModel(this)).serviceTiers.map((t) => ({
@@ -290,9 +265,7 @@ export class CodexChatModel implements INodeType {
           })),
         ];
       },
-      async verbosityLevels(
-        this: ILoadOptionsFunctions,
-      ): Promise<INodePropertyOptions[]> {
+      async verbosityLevels(this: ILoadOptionsFunctions): Promise<INodePropertyOptions[]> {
         return [
           { name: "Provider Default (No Override)", value: "" },
           ...((await selectedModel(this)).supportsVerbosity
@@ -310,27 +283,17 @@ export class CodexChatModel implements INodeType {
         credential: ICredentialsDecrypted<ICredentialDataDecryptedObject>,
       ): Promise<INodeCredentialTestResult> {
         try {
-          const profile = await runtime().store.read(
-            credentialBinding(credential.data),
-          );
-          const status = localStatus(
-            profile,
-            runtime().sessions.refreshEnabled,
-          );
-          if (
-            profile.tokens.expiresAt <= Date.now() &&
-            status.account.renewal !== "enabled"
-          )
+          const status = await nativeService().status(credentialBinding(credential.data));
+          if (status.account.state === "expired" && status.account.renewal !== "enabled")
             return {
               status: "Error",
               message:
                 "This session has expired and automatic renewal is unavailable. Reconnect this profile with the account helper.",
             };
-          if (profile.state !== "ready")
+          if (["reconnect_required", "refresh_uncertain"].includes(status.account.state))
             return {
               status: "Error",
-              message:
-                "This profile requires reconnection with the account helper.",
+              message: "This profile requires reconnection with the account helper.",
             };
           const renewal =
             status.account.renewal === "disabled_by_instance"
@@ -349,15 +312,10 @@ export class CodexChatModel implements INodeType {
     },
   };
 
-  async supplyData(
-    this: ISupplyDataFunctions,
-    itemIndex: number,
-  ): Promise<SupplyData> {
+  async supplyData(this: ISupplyDataFunctions, itemIndex: number): Promise<SupplyData> {
     try {
-      const binding = credentialBinding(
-        await this.getCredentials("codexAccount"),
-      );
-      const rt = runtime();
+      const binding = credentialBinding(await this.getCredentials("codexAccount"));
+      const service = nativeService();
       const context = nativeContext(this);
       assert(
         this.onExecutionFinish,
@@ -395,11 +353,7 @@ export class CodexChatModel implements INodeType {
       const output = this.getNodeParameter("output", itemIndex, {}) as {
         verbosity?: string;
       };
-      const reliabilityOptions = this.getNodeParameter(
-        "reliability",
-        itemIndex,
-        {},
-      ) as {
+      const reliabilityOptions = this.getNodeParameter("reliability", itemIndex, {}) as {
         timeoutSeconds?: number;
         idleSeconds?: number;
         maxRetries?: number;
@@ -409,9 +363,7 @@ export class CodexChatModel implements INodeType {
         reasoningEffort: reasoning.effort || undefined,
         reasoningSummary: reasoning.summary || undefined,
         verbosity: output.verbosity || undefined,
-        serviceTier:
-          (this.getNodeParameter("speed", itemIndex, "") as string) ||
-          undefined,
+        serviceTier: (this.getNodeParameter("speed", itemIndex, "") as string) || undefined,
         timeoutMs: (reliabilityOptions.timeoutSeconds ?? 300) * 1000,
         idleTimeoutMs: (reliabilityOptions.idleSeconds ?? 90) * 1000,
         maxRetries: reliabilityOptions.maxRetries ?? 2,
@@ -421,11 +373,8 @@ export class CodexChatModel implements INodeType {
         affinity?: AffinityPolicy["mode"];
         conversationKey?: string;
       };
-      const chat = new ChatModel({
+      const chat = serviceModel(service, binding, {
         model,
-        session: (signal) => rt.sessions.session(binding, signal),
-        catalog: rt.catalog,
-        transport: rt.transport,
         settings,
         replay,
         context,
@@ -434,19 +383,10 @@ export class CodexChatModel implements INodeType {
           mode: cache.affinity ?? "execution",
           conversationKey: cache.conversationKey,
         },
-        account: {
-          binding,
-          reader: rt.account,
-          reset: rt.resets,
-          policy: recoveryPolicy(
-            this.getNodeParameter("accountRecovery", itemIndex, {}),
-          ),
-        },
+        policy: recoveryPolicy(this.getNodeParameter("accountRecovery", itemIndex, {})),
         executionSignal: this.getExecutionCancelSignal(),
       });
-      chat.callbacks = [
-        new CodexTracing(this, { model, alias: this.getNode().name }),
-      ];
+      chat.callbacks = [new CodexTracing(this, { model, alias: this.getNode().name })];
       return { response: chat };
     } catch (error) {
       throw new NodeOperationError(this.getNode(), safeError(error).message);

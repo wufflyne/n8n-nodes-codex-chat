@@ -7,18 +7,13 @@ export interface DurableBinding {
   readonly binding: Readonly<Binding>;
 }
 /** A proof exists only after this module has exclusively written and synced the complete binding. */
-export async function deliverBinding(
-  filename: string,
-  binding: Binding,
-): Promise<DurableBinding> {
+export async function deliverBinding(filename: string, binding: Binding): Promise<DurableBinding> {
   let file;
   try {
     const parent = path.dirname(path.resolve(filename)),
       stat = await lstat(parent);
     assert(
-      stat.isDirectory() &&
-        (stat.mode & 0o077) === 0 &&
-        (await realpath(parent)) === parent,
+      stat.isDirectory() && (stat.mode & 0o077) === 0 && (await realpath(parent)) === parent,
       "Use a private parent directory without symbolic-link components.",
     );
     file = await open(filename, "wx", 0o600);
@@ -51,4 +46,15 @@ export function verifyDelivery(proof: DurableBinding, binding: Binding): void {
       proof.binding.bindingSecret === binding.bindingSecret,
     "Profile activation requires an already durable binding.",
   );
+}
+
+/** Gateway delivery is committed in its encrypted administrator-scoped transaction first. */
+export async function deliverEncryptedBinding(
+  binding: Binding,
+  commit: () => Promise<void>,
+): Promise<DurableBinding> {
+  await commit();
+  const proof = Object.freeze({ binding: Object.freeze({ ...binding }) });
+  delivered.add(proof);
+  return proof;
 }

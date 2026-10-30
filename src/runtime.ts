@@ -9,25 +9,28 @@ import { ModelCatalog } from "./core/catalog.js";
 import { assert, record, string } from "./core/errors.js";
 import { ResponsesTransport } from "./core/transport.js";
 import type { Binding } from "./core/types.js";
+import { ProfileOwner } from "./service/owner.js";
+const owners = new WeakMap<object, ProfileOwner>();
 
-export function runtimeFromEnvironment() {
+export function runtimeFromEnvironment(options: { readOnly?: boolean } = {}) {
   assert(
     process.env.EXECUTIONS_MODE !== "queue",
     "This release supports one n8n execution process. Queue mode requires a shared coordinator and is disabled.",
   );
-  const directory = string(
-    process.env.N8N_CODEX_STORE_DIR,
-    "N8N_CODEX_STORE_DIR",
-  );
-  const encodedKey = string(
-    process.env.N8N_CODEX_STORE_KEY,
-    "N8N_CODEX_STORE_KEY",
-  );
+  const directory = string(process.env.N8N_CODEX_STORE_DIR, "N8N_CODEX_STORE_DIR");
+  const encodedKey = string(process.env.N8N_CODEX_STORE_KEY, "N8N_CODEX_STORE_KEY");
   assert(
     /^[A-Za-z0-9+/]{43}=$/.test(encodedKey),
     "N8N_CODEX_STORE_KEY must be a base64-encoded 32-byte key.",
   );
-  const store = new ProfileStore(directory, Buffer.from(encodedKey, "base64"));
+  const owner = new ProfileOwner(directory);
+  let acquired: Promise<void> | undefined;
+  const store = new ProfileStore(
+    directory,
+    Buffer.from(encodedKey, "base64"),
+    options.readOnly ? undefined : () => (acquired ??= owner.acquire()),
+    options.readOnly,
+  );
   const auth = new CodexAuthProvider();
   const sessions = new AccountSessionManager(
       store,
@@ -39,7 +42,7 @@ export function runtimeFromEnvironment() {
       account,
       new ResetStore(directory, Buffer.from(encodedKey, "base64")),
     );
-  return {
+  const resources = {
     store,
     auth,
     sessions,
@@ -49,6 +52,13 @@ export function runtimeFromEnvironment() {
     catalog: new ModelCatalog(),
     transport: new ResponsesTransport(),
   };
+  if (!options.readOnly) owners.set(resources, owner);
+  return resources;
+}
+
+export async function closeRuntimeOwner(resources: ReturnType<typeof runtimeFromEnvironment>) {
+  await resources.sessions.settleRenewals();
+  await owners.get(resources)?.close();
 }
 
 let singleton: ReturnType<typeof runtimeFromEnvironment> | undefined;

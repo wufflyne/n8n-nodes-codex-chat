@@ -1,11 +1,17 @@
 <h1 align="center">Codex Wire for n8n</h1>
 
-<p align="center">Your Codex account, connected to native n8n workflows.</p>
-<p align="center"><strong>v0.0.4</strong> · Self-hosted · One package, four nodes · MIT</p>
+<p align="center">Codex subscription accounts for native n8n workflows and standalone Agents.</p>
+<p align="center"><strong>v0.0.5</strong> · Self-hosted · Four nodes + explicit gateway · MIT</p>
 
 Codex Wire connects an independently linked Codex account to n8n's AI Agent, tools, memory and parsers. Model requests go directly over HTTP; n8n owns workflow execution and tool calls. There is no embedded Codex CLI agent or Platform API-key fallback.
 
 This is an independent, experimental integration with the private Codex backend. Models, capabilities and allowance depend on your account. Install all four nodes from the single [`n8n-nodes-codex-chat`](https://www.npmjs.com/package/n8n-nodes-codex-chat) npm package.
+
+## Standalone Agents and shared account ownership
+
+The optional gateway provides a protected four-view account console, device/manual onboarding, scoped connection keys, bounded Responses streaming and a full account pool. Native workflows and standalone Agents use the same sole account owner. The pool requires the included matched n8n lifecycle integration; stock n8n supports a fixed-account connection. See [gateway setup, privacy and recovery](docs/gateway.md).
+
+The local release includes a single npm tarball and matched gateway/n8n images. [Qualification coverage](docs/qualification.md) and [compatibility metadata](compatibility.json) distinguish synthetic installation tests from historical 0.0.4 live observations. Public publication and production deployment are separate operator steps.
 
 ## Four focused nodes
 
@@ -27,10 +33,10 @@ Use a compatible **self-hosted n8n** instance and a Codex account you control. T
 As an n8n Owner or Admin, open **Settings → Community Nodes → Install** and enter:
 
 ```text
-n8n-nodes-codex-chat@0.0.4
+n8n-nodes-codex-chat@0.0.5
 ```
 
-Acknowledge n8n's community-code notice and install. **Codex Chat Model**, **Codex Account**, **Codex Account Router** and **Codex Image** appear together. Community and unverified packages must be enabled on the instance.
+Until publication, use the reviewed local tarball and the manual installation procedure. After publication, acknowledge n8n's community-code notice and install. **Codex Chat Model**, **Codex Account**, **Codex Account Router** and **Codex Image** appear together. Community and unverified packages must be enabled on the instance.
 
 For a terminal-based installation, use the [npm installation guide](docs/install.md#manual-npm-installation). A standalone Docker build remains available under [build from source](docs/install.md#build-from-source).
 
@@ -94,9 +100,9 @@ Examples use the npm community-package namespace and can be imported directly af
 | Node.js | `26.12.1` |
 | Codex client contract | `0.166.0` — [`55c099a`](https://github.com/openai/codex/tree/55c099a142eb302188fee00ab9e9062f2db1c359) |
 
-The supported deployment is one trusted self-hosted execution process. Queue/multiworker mode, interrupted in-flight Agent replay, direct PDF/audio/video input, embeddings and hosted provider tools are outside this release. New protocol types require an adapter update. The backend can change independently of this package.
+Embedded mode supports one trusted self-hosted execution process; gateway mode gives n8n no OAuth/store access and centralizes ownership. The matched standalone Agents integration preserves operation identity through approval/checkpoint restart. Native workflow continuation after a process restart, queue/multiworker mode, direct PDF/audio/video input, embeddings and hosted provider tools are outside this release. New protocol types require an adapter update. The backend can change independently of this package.
 
-[Compatibility metadata](compatibility.json) separates synthetic/native tests from limited live evidence. Real rotating refresh, a second real account, reset consumption, current image generation and standard-route entitlement remain unverified. Community loading uses the pinned host dependency resolution. The installation guide covers the required server configuration and helper path. No n8n Cloud support or official OpenAI/n8n affiliation is claimed.
+[Compatibility metadata](compatibility.json) separates synthetic/native tests from limited live evidence. All 0.0.5 real-account activity remains unqualified; historical baseline live observations do not qualify changed 0.0.5 bytes. Community loading uses the pinned host dependency resolution. The installation guide covers the required server configuration and helper path. No n8n Cloud support or official OpenAI/n8n affiliation is claimed.
 
 ## Development
 
@@ -104,10 +110,11 @@ For local TypeScript work, use the pinned Node version:
 
 ```sh
 npm ci --ignore-scripts --no-audit --no-fund --cache .npm-cache
-npm run check
+npm ci --prefix integration/consumer --ignore-scripts --no-audit --no-fund --cache "$PWD/.npm-cache"
+CODEX_WIRE_SDK_ROOT="$PWD/integration/consumer/node_modules" npm run check
 npm run typecheck
 ```
 
 The source tree keeps protocol, authentication, account recovery and native adapters in separate modules. Tests use synthetic providers. The [development guide](docs/development.md) covers module boundaries, extension rules and local release tooling; [installation](docs/install.md) covers runtime setup and community packaging.
 
-[MIT license](LICENSE) · Maintained by [wufflyne](https://wufflyne.com)
+[MIT license](LICENSE) · By [wufflyne](https://wufflyne.com).

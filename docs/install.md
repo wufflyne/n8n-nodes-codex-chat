@@ -1,5 +1,7 @@
 # Installation
 
+Version 0.0.5 is delivered as local release artifacts. Public registry publication and live-account qualification are separate steps. Use the reviewed local tarball until publication. For standalone Agents and shared account ownership, see [the gateway guide](gateway.md). Existing embedded workflows keep their node IDs and credentials.
+
 One npm package installs all four Codex Wire nodes and the shared **Codex Account** credential. Use a trusted self-hosted n8n instance. This independent, experimental integration is not a verified community node and does not provide n8n Cloud support.
 
 The verified stack is n8n `2.45.6`, n8n-workflow `2.45.3`, LangChain Core `1.2.8` and Node.js `26.12.1`. One execution process is supported; queue/multiworker mode is outside this release.
@@ -7,7 +9,7 @@ The verified stack is n8n `2.45.6`, n8n-workflow `2.45.3`, LangChain Core `1.2.8
 ## Install from the n8n panel
 
 1. Sign in as an Owner or Admin and open **Settings → Community Nodes**.
-2. Choose **Install** and enter `n8n-nodes-codex-chat@0.0.4`.
+2. Choose **Install** and enter `n8n-nodes-codex-chat@0.0.5`.
 3. Acknowledge the community-code notice and install.
 
 **Codex Chat Model**, **Codex Account**, **Codex Account Router** and **Codex Image** appear together. Community packages must be enabled, unverified packages allowed, and package loading not prevented by server configuration. See [n8n's installation guide](https://docs.n8n.io/integrations/community-nodes/installation-and-management/gui-installation.md) and [package settings](https://docs.n8n.io/hosting/configuration/environment-variables/nodes.md).
@@ -22,10 +24,10 @@ Run this as the n8n service user, inside its container or deployment environment
 mkdir -p ~/.n8n/nodes
 cd ~/.n8n/nodes
 npm install --omit=dev --legacy-peer-deps --ignore-scripts \
-  --no-audit --no-fund n8n-nodes-codex-chat@0.0.4
+  --no-audit --no-fund n8n-nodes-codex-chat@0.0.5
 ```
 
-Restart n8n afterward. For an offline installation, replace the package name with an explicit local path to `n8n-nodes-codex-chat-0.0.4.tgz`. This follows [n8n's manual installation layout](https://docs.n8n.io/integrations/community-nodes/installation-and-management/manual-installation.md).
+Restart n8n afterward. For an offline installation, replace the package name with an explicit local path to `n8n-nodes-codex-chat-0.0.5.tgz`. This follows [n8n's manual installation layout](https://docs.n8n.io/integrations/community-nodes/installation-and-management/manual-installation.md).
 
 The plugin resolves the host's exact `@langchain/core` and `n8n-workflow` objects. The pinned n8n loader supplies host search paths through `NODE_PATH`. Do not install a second LangChain copy to silence a peer warning. Other layouts need a compatibility check.
 
@@ -133,7 +135,7 @@ To load an existing platform-specific image archive (Linux amd64 is the verified
 
 ```sh
 (cd artifacts && sha256sum --check SHA256SUMS)
-docker load --input artifacts/codex-wire-n8n-0.0.4.tar
+docker load --input artifacts/codex-wire-n8n-0.0.5.tar
 ```
 
 The source-built image already includes the package and uses this helper location:
@@ -150,7 +152,7 @@ chmod 0700 secrets
 docker run --rm --user "$(id -u):$(id -g)" \
   --mount "type=bind,src=$PWD/secrets,dst=/run/codex-secrets" \
   --entrypoint /opt/n8n-codex/node_modules/.bin/n8n-codex-account \
-  codex-wire-v0-0-4-n8n:0.0.4 \
+  codex-wire-v0-0-5-n8n:0.0.5 \
   keygen --output /run/codex-secrets/runtime.env
 docker compose -f compose.portable.yaml up -d
 ```
@@ -170,3 +172,5 @@ node examples/convert-namespaces.cjs \
 ```
 
 The converter changes only the four exact Codex Wire type identifiers, including nested examples, and refuses to overwrite its input. Do not bulk-convert existing workflows. The image example's optional Workflow Tool returns metadata; its Webhook branch delivers image bytes.
+
+By [wufflyne](https://wufflyne.com).

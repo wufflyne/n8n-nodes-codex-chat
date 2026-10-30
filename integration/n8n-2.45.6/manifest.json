@@ -1,0 +1,70 @@
+{
+  "packages/@n8n/agents/src/runtime/model/model-request-context.ts": {
+    "before": null,
+    "after": "4b7109514b220e690c50269ffda9861547bff357e34d070a732e10b04527f821"
+  },
+  "packages/@n8n/agents/src/types/sdk/agent.ts": {
+    "before": "4d32024acb2af3761d093791cde683b73bab1ef9c6ae1074c0c063b685d0d092",
+    "after": "aab6a88ed46161356148fcdad78b7eb16b0f40ee7d045ba123badadebf3360ec"
+  },
+  "packages/@n8n/agents/src/types/runtime/agent-runtime.ts": {
+    "before": "7e5cef8e8f6ceb8a8a8b88d052efdfc6bac697456b560a75513058d9b46e7333",
+    "after": "16ee35ac0e63c5acca4556c066b557592cecfb07307f770e0c57446be0bff3c5"
+  },
+  "packages/@n8n/agents/src/sdk/agent.ts": {
+    "before": "75efb29b84a5d4ac251840ed32c8dd28103a7d04d2b3abfe567919d0f6a8bfcb",
+    "after": "98a69035ae36c62b1942eba9a3ff672fd118545cd0f76fe9c6b6ae2a9e8ee8a6"
+  },
+  "packages/@n8n/agents/src/types/runtime/agent-loop.ts": {
+    "before": "d612be72a85300dc308cc213be3f7cfe40d839807e6ab9cc2380d6f78698bdbd",
+    "after": "70dd61c75c4a399545d51bfea6b4e006b6340f6ede672cb7b6053d0a7a156d28"
+  },
+  "packages/@n8n/agents/src/runtime/model/lazy-ai.ts": {
+    "before": "0946c588fef7f9244414e5989e51e462f5090904060648d8497c6746979dacaf",
+    "after": "d95d030ac97ec3b90be888eda0ec98a0185a58ab93761cb3761eb4d44fa18b23"
+  },
+  "packages/@n8n/agents/src/runtime/loop/agent-runtime.ts": {
+    "before": "a6b05e744fad6c4bb7d036e4986dd4cd9207e55cea29a9cd2d8763aeab12bc00",
+    "after": "48906ed89e515a274a4114b427ea423a0451965e2cd8d3abed381559462f1822"
+  },
+  "packages/@n8n/agents/src/runtime/memory/title-generation.ts": {
+    "before": "a9e93716396a0b73d1c6fb491d229a0158d5372e1f72ca6bddf2f06d717445ee",
+    "after": "a7cc38282991d5c6ce547726685c4c662e60fe9c216a6bda22b8b61b52e73046"
+  },
+  "packages/@n8n/agents/src/runtime/memory/observation-log-defaults.ts": {
+    "before": "feab7d8a48841a6b64817a093b0bc6875c6a806dc662be32836a183194a8acb8",
+    "after": "d35b679ba2943e46ed4cdba12f3f3c04753bf961ecbd5f7a493cb04bec2eb2bd"
+  },
+  "packages/@n8n/agents/src/runtime/memory/episodic-memory-defaults.ts": {
+    "before": "b9592548ad32e81c3f53f4553ba0f841552d8f3468093d231cebb576b1af68c6",
+    "after": "a03442786890f25615c26755b227ba1537dc5c47521facd62da66c258ab46a00"
+  },
+  "packages/@n8n/agents/src/runtime/model/model-factory.ts": {
+    "before": "2b8264c0400735a7a5ae0d8e0973bc211f4b9d58a3d97922052a5453ffafb156",
+    "after": "1d5661467c714f6130f4203bbcf940efbed43547d1e006340d417bbe6c97ea55"
+  },
+  "packages/cli/src/modules/agents/codex-wire-context.ts": {
+    "before": null,
+    "after": "40d5074205b457fab1cc421a2c7fb2a4a42b2347d55a1411faef70d937c1f65d"
+  },
+  "packages/cli/src/modules/agents/agent-turn-execution.service.ts": {
+    "before": "171e2ddec50d35f48557aa43b6868961c082fd90e82dbeffa5663a6424e0be39",
+    "after": "d2dec2cf0631b0c46d42ed681dc8706fbf9b0835caade0a3560a02fae432024c"
+  },
+  "packages/cli/src/modules/agents/agent-runtime-reconstruction.service.ts": {
+    "before": "9490d7f9231a60637ba160dc6a56dc868eb0de32277409c5fa9895ee0213bd5c",
+    "after": "38dee13b43c586855cd8eea841fce63b745d7091a14a2f39a5adfaef10749b38"
+  },
+  "packages/cli/src/modules/agents/agent-workflow-execution.service.ts": {
+    "before": "bb77c324b848c2495f236ac99f9de09230a7577b85108d7b79ffde8659391218",
+    "after": "de2e83c43fb597cd1e7c72301881c9cd02c834c120612df70b4d8bee77869f00"
+  },
+  "packages/cli/src/modules/agents/sub-agents/sub-agent-runner.ts": {
+    "before": "a1e4f562d70ffdbd1ad46712494eda0f806a5e2de6b2114595c5c3b7a5d9aad4",
+    "after": "80549620d307357caf5834aaeac2d66aeb267796ffcdc29bbc239ab736941fb6"
+  },
+  "packages/cli/src/modules/agents/background/sub-agent-background-runner.ts": {
+    "before": "4785b99ec833ea0fad15bcc95111e505bb61e6d6f21f535f781e0a86bbaa154c",
+    "after": "051238077b0c0706a0c58ff3f7a7030bc2a8e21570a170f0242a9e647310476a"
+  }
+}

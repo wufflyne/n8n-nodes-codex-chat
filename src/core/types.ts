@@ -49,6 +49,8 @@ export interface Session {
   affinity: string;
   generation: number;
   identity?: Identity;
+  /** Verified account equality for native RPC; excludes tokens and account identifiers. */
+  routingIdentity?: string;
   profileId?: string;
 }
 export interface ModelInfo {

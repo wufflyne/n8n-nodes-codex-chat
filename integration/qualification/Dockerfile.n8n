@@ -1,0 +1,11 @@
+FROM docker.io/n8nio/n8n:2.45.6@sha256:45edf89655fd66dd55ea9336c1791ad14777599fdbf6c5aec6db583ede99a40b
+USER root
+COPY --chown=node:node runtime/ /opt/codex-wire-context/
+COPY --chown=node:node artifacts/ /opt/codex-wire-artifacts/
+COPY --chown=node:node install-cache/ /opt/codex-wire-install-cache/
+COPY --chown=node:node overlay/cli/ /usr/local/lib/node_modules/n8n/dist/
+COPY --chown=node:node overlay/agents/ /usr/local/lib/node_modules/n8n/node_modules/.pnpm/@n8n+agents@file++++home+runner+_work+n8n+n8n+packages+@n8n+agents/node_modules/@n8n/agents/dist/
+COPY --chown=node:node qualification/link-peers.cjs /opt/codex-wire-context/link-peers.cjs
+RUN node /opt/codex-wire-context/link-peers.cjs
+ENV N8N_CUSTOM_EXTENSIONS="" N8N_DIAGNOSTICS_ENABLED=false N8N_VERSION_NOTIFICATIONS_ENABLED=false N8N_PERSONALIZATION_ENABLED=false N8N_TEMPLATES_ENABLED=false
+USER node

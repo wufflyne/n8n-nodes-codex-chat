@@ -1,0 +1,25 @@
+# Join the operator-selected existing private n8n network.
+# Configure n8n with http://codex-wire-gateway:8787 and explicit private HTTP.
+# Keep administration behind loopback or an operator-controlled HTTPS ingress.
+services:
+  codex-wire-gateway:
+    image: codex-wire-gateway:0.0.5
+    stop_grace_period: 120s
+    restart: unless-stopped
+    cpus: 1.0
+    mem_limit: 512m
+    memswap_limit: 512m
+    pids_limit: 64
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    ports:
+      - "127.0.0.1:8788:8788"
+    volumes:
+      - ./private/gateway-data:/var/lib/codex-wire
+      - ./private/gateway-config:/etc/codex-wire:ro
+    networks: [n8n-private]
+networks:
+  n8n-private:
+    external: true
+    name: ${N8N_PRIVATE_NETWORK:?Set the existing private network shared with n8n}

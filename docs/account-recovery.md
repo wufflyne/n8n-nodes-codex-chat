@@ -27,3 +27,5 @@ Private directory locks are never stolen by age. After an actual crash, stop eve
 This release implements no purchases, top-ups, reserve/extra-usage activation, billing settings or automatic image-quota resets. All release reset mutation tests use synthetic providers; actual entitlement/effects remain unverified.
 
 Automatic recovery validates the complete local request before consuming a reset credit. Invalid tools, content, schema, affinity or request size therefore cannot spend a reset. After HTTP429, quota classification starts a new authenticated read after that rejection; an older in-flight usage response cannot authorize switching accounts or requesting recovery. Ordinary display reads still coalesce.
+
+By [wufflyne](https://wufflyne.com).

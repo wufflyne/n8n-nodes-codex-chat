@@ -15,3 +15,5 @@ Choose existing Output → Verbosity → Low only if advertised. Keep model, rea
 Use an explicit Simple Memory window and task-specific native HTTP/Edit Fields/Code output projection or text extraction/retrieval. A window can forget older facts. Keep required IDs/units/source timestamps/error/pagination/completeness fields; return a retrieval path when more records exist. Arbitrary tool outputs are not rewritten by the adapter.
 
 `getNumTokens` is a local **approximate text-content** heuristic: UTF-8 bytes divided by four, rounded up. It performs no tokenizer download and is not actual usage or a guaranteed upper bound. Explicit text arrays concatenate in original order; multimodal/unknown blocks fail clearly. Native `maxTokensFromMemory` counts only message content, omitting tools/schemas/replay/role/image tokens, and may trim partial human messages. It is unsuitable as a guaranteed Codex context cap and is absent from shipped tool/memory examples. Incomplete tool/replay turns fail before dispatch; the adapter does not repair history silently.
+
+By [wufflyne](https://wufflyne.com).

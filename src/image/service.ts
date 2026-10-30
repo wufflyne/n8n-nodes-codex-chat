@@ -1,3 +1,4 @@
+import type { ProfileBinding as Binding } from "../service/access.js";
 import { randomUUID } from "node:crypto";
 import type { AccountSessionManager } from "../auth/sessions.js";
 import { accountHeaders } from "../core/catalog.js";
@@ -12,7 +13,7 @@ import {
 } from "../core/http.js";
 import { recordInvocation } from "../core/execution-usage.js";
 import type { ExecutionContext } from "../core/affinity.js";
-import { CODEX_BASE, type Binding } from "../core/types.js";
+import { CODEX_BASE } from "../core/types.js";
 import { text, unixDate, identifier } from "../account/usage.js";
 import type { SessionAccess } from "../account/types.js";
 import { imageDimensions, strictBase64 } from "./validation.js";
@@ -34,15 +35,10 @@ export class ImageService {
     } = {},
   ) {
     assert(
-      typeof prompt === "string" &&
-        prompt.length >= 1 &&
-        prompt.length <= 32000,
+      typeof prompt === "string" && prompt.length >= 1 && prompt.length <= 32000,
       "Image Prompt must contain 1–32,000 characters.",
     );
-    assert(
-      typeof transparent === "boolean",
-      "Transparent Background must be boolean.",
-    );
+    assert(typeof transparent === "boolean", "Transparent Background must be boolean.");
     const timeout = options.timeoutMs ?? 180000;
     assert(
       Number.isFinite(timeout) && timeout >= 30000 && timeout <= 600000,
@@ -58,35 +54,27 @@ export class ImageService {
         ? this.sessions.currentSession(binding, scope.signal)
         : this.sessions.session(binding, scope.signal));
       throwIfAborted(scope.signal);
-      recorder = recordInvocation(
-        options.context,
-        session.affinity,
-        "gpt-image-2",
-        "images",
-      );
+      recorder = recordInvocation(options.context, session.affinity, "gpt-image-2", "images");
       const turn = randomUUID();
       recorder.attempt();
       waiting = true;
-      const response = await this.fetchImpl(
-        `${this.baseUrl}/images/generations`,
-        {
-          method: "POST",
-          redirect: "error",
-          signal: scope.signal,
-          headers: {
-            ...accountHeaders(session),
-            "Content-Type": "application/json",
-            "x-codex-image-turn-id": turn,
-          },
-          body: JSON.stringify({
-            prompt,
-            model: "gpt-image-2",
-            background: transparent ? "transparent" : "opaque",
-            quality: "auto",
-            size: "auto",
-          }),
+      const response = await this.fetchImpl(`${this.baseUrl}/images/generations`, {
+        method: "POST",
+        redirect: "error",
+        signal: scope.signal,
+        headers: {
+          ...accountHeaders(session),
+          "Content-Type": "application/json",
+          "x-codex-image-turn-id": turn,
         },
-      );
+        body: JSON.stringify({
+          prompt,
+          model: "gpt-image-2",
+          background: transparent ? "transparent" : "opaque",
+          quality: "auto",
+          size: "auto",
+        }),
+      });
       waiting = false;
       if (!response.ok) {
         recorder.rejected();
@@ -94,9 +82,7 @@ export class ImageService {
       }
       admitted = true;
       recorder.admitted();
-      const body = record(
-        await readJson(response, 48 * 1024 * 1024, scope.signal),
-      );
+      const body = record(await readJson(response, 48 * 1024 * 1024, scope.signal));
       const createdAt = unixDate(body.created);
       assert(createdAt, "The generated image creation time is invalid.");
       assert(
@@ -122,10 +108,7 @@ export class ImageService {
           background: text(body.background, 40),
           quality: text(body.quality, 40),
           size: text(body.size, 80),
-          generationId: identifier(
-            item.generation_id ?? body.generation_id,
-            256,
-          ),
+          generationId: identifier(item.generation_id ?? body.generation_id, 256),
           requestId: requestId(response) ?? turn,
         },
       };
