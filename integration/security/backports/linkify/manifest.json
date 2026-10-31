@@ -1,0 +1,32 @@
+{
+  "source": "https://registry.npmjs.org/markdown-it/-/markdown-it-14.3.2.tgz",
+  "gitHead": "efb9993124c3eb229eea24dd659c91dcee7f6d60",
+  "target": "markdown-it@13.0.2",
+  "files": {
+    "core": {
+      "source": "lib/rules_core/linkify.mjs",
+      "algorithmSha256": "e68ac3597363b13a7451e65d9a7943ce99f4b57e9509eb62eebb1a3162423499",
+      "target": "lib/rules_core/linkify.js",
+      "targetSha256": "c57bc15b52774f06f070e6bc1a9714d36d588affa9ea154bcdbb7696bb2656b8",
+      "bundleStart": "COe=i(((e,t)=>{",
+      "bundleEnd": "wOe=i(",
+      "bundleModuleSha256": "dcf1dc0ad2bc351dbd74e49b5f1fd9411a8560a9d4f6b160b17cf910a539eb45"
+    },
+    "inline": {
+      "source": "lib/rules_inline/linkify.mjs",
+      "algorithmSha256": "3a55e9a5fa81bd7b924d4f7469452a7fa6ba999f5204ff076a64f5dc8477348e",
+      "target": "lib/rules_inline/linkify.js",
+      "targetSha256": "98723cdbd6f9a5e9d0e7f1d26be6bb966f65ed009c6ea093ac98796c1c6bcb91",
+      "bundleStart": "KOe=i(((e,t)=>{",
+      "bundleEnd": "qOe=i(",
+      "bundleModuleSha256": "2ad386aeacfab39b97ef8c1423d191eb8acd3476877e71eca89bd55b7066f573"
+    }
+  },
+  "existingBundledLinkifyIt": {
+    "version": "5.0.2",
+    "start": "cke=i(((e,t)=>{",
+    "end": "lke=r(",
+    "sha256": "241a346bf231c87d0d659e4f76549394afc2661c2941f63dee2c9da3b9416b15",
+    "conditions": "The match implementation merges pre-scanned matches; the email local part is bounded to 64 characters. The exact existing module is retained and independently exercised."
+  }
+}

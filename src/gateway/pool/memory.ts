@@ -1,4 +1,5 @@
 import { WireError } from "../errors.js";
+import type { PendingAdmissionBudget } from "./admission.js";
 
 export interface MemoryLease {
   (): void;
@@ -14,7 +15,11 @@ export class BodyMemoryAdmission {
     readonly maximumWaiters = 64,
     readonly waitMs = 10000,
   ) {}
-  async acquire(contentLength: number | undefined, signal?: AbortSignal) {
+  async acquire(
+    contentLength: number | undefined,
+    signal?: AbortSignal,
+    pending?: PendingAdmissionBudget,
+  ) {
     if (
       contentLength !== undefined &&
       (!Number.isSafeInteger(contentLength) ||
@@ -22,20 +27,21 @@ export class BodyMemoryAdmission {
         contentLength > 32 * 1024 * 1024)
     )
       throw new WireError(413, "request_too_large", "The request exceeds its body limit.");
-    return this.acquireBytes(32 * 1024 * 1024 + 4 * (contentLength ?? 32 * 1024 * 1024), signal);
+    return this.acquireBytes(32 * 1024 * 1024 + 4 * (contentLength ?? 32 * 1024 * 1024), signal, pending);
   }
   async acquireRequest(
     method: string,
     contentLength: number | undefined,
     transferEncoding: boolean,
     signal?: AbortSignal,
+    pending?: PendingAdmissionBudget,
   ) {
     if (method === "GET" || method === "HEAD") {
       if (transferEncoding || (contentLength !== undefined && contentLength !== 0))
         throw new WireError(400, "unexpected_body", "GET and HEAD requests cannot include a body.");
-      return this.acquireBytes(8 * 1024 * 1024, signal);
+      return this.acquireBytes(8 * 1024 * 1024, signal, pending);
     }
-    return this.acquire(contentLength, signal);
+    return this.acquire(contentLength, signal, pending);
   }
   private valid(bytes: number) {
     if (!Number.isSafeInteger(bytes) || bytes < 0 || bytes > this.budget)
@@ -89,9 +95,13 @@ export class BodyMemoryAdmission {
       );
     return this.lease(bytes);
   }
-  async acquireBytes(reservation: number, signal?: AbortSignal): Promise<MemoryLease> {
+  async acquireBytes(
+    reservation: number,
+    signal?: AbortSignal,
+    pending?: PendingAdmissionBudget,
+  ): Promise<MemoryLease> {
     this.valid(reservation);
-    const deadline = Date.now() + this.waitMs;
+    const deadline = Date.now() + Math.min(this.waitMs, pending?.waitMs ?? this.waitMs);
     while (this.reserved + reservation > this.budget) {
       if (signal?.aborted)
         throw new WireError(
@@ -99,23 +109,31 @@ export class BodyMemoryAdmission {
           "cancelled",
           "The request was cancelled before its body was admitted.",
         );
-      if (this.waiters.size >= this.maximumWaiters || Date.now() >= deadline)
+      const releasePending =
+        this.waiters.size < this.maximumWaiters && Date.now() < deadline
+          ? pending ? pending.tryAcquire() : () => {}
+          : undefined;
+      if (!releasePending)
         throw new WireError(
           429,
           "memory_queue_full",
           "The gateway body queue is full; no request was admitted.",
         );
       await new Promise<void>((resolve, reject) => {
-        const wake = () => {
+        let settled = false;
+        const finish = (error?: WireError) => {
+          if (settled) return;
+          settled = true;
           clearTimeout(timer);
           signal?.removeEventListener("abort", abort);
           this.waiters.delete(wake);
-          resolve();
+          releasePending();
+          if (error) reject(error);
+          else resolve();
         };
+        const wake = () => finish();
         const abort = () => {
-          clearTimeout(timer);
-          this.waiters.delete(wake);
-          reject(
+          finish(
             new WireError(
               422,
               "cancelled",

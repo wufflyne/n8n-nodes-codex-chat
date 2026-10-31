@@ -1,9 +1,10 @@
-name: work-n8n-codex-v005
+# Task-local synthetic lab recipe. No live account data. Use only after approved scope and prior journal.
+name: work-n8n-codex-v010
 services:
   gateway:
-    image: work-n8n-codex-v005-gateway:0.0.5
+    image: work-n8n-codex-v010-gateway:${BUILD_CHECKPOINT:?Set the prepared checkpoint}
     stop_grace_period: 120s
-    container_name: work-n8n-codex-v005-gateway
+    container_name: work-n8n-codex-v010-gateway
     build:
       context: ${QUALIFICATION_ROOT:?Set the absolute approved workspace qualification directory}/build-output/${BUILD_CHECKPOINT:?Set the prepared build checkpoint}
       dockerfile: gateway.Dockerfile
@@ -15,7 +16,7 @@ services:
     read_only: true
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
-    ports: ["127.0.0.1:15888:8788"]
+    ports: ["127.0.0.1:15911:8788"]
     volumes:
       - ${QUALIFICATION_ROOT}/gateway-data:/var/lib/codex-wire
       - ${QUALIFICATION_ROOT}/gateway-config:/etc/codex-wire:ro
@@ -23,8 +24,8 @@ services:
       NODE_OPTIONS: "--max-old-space-size=256 --require=/etc/codex-wire/synthetic-fetch.cjs"
     networks: [test]
   n8n:
-    image: work-n8n-codex-v005-n8n:2.45.6-context-v1
-    container_name: work-n8n-codex-v005-n8n
+    image: work-n8n-codex-v010-n8n:${BUILD_CHECKPOINT:?Set the prepared checkpoint}
+    container_name: work-n8n-codex-v010-n8n
     build:
       context: ${QUALIFICATION_ROOT}/build-output/${BUILD_CHECKPOINT}
       dockerfile: n8n.Dockerfile
@@ -35,7 +36,7 @@ services:
     pids_limit: 256
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
-    ports: ["127.0.0.1:15885:5678"]
+    ports: ["127.0.0.1:15910:5678"]
     volumes: ["${QUALIFICATION_ROOT}/n8n-data:/home/node/.n8n"]
     environment:
       N8N_CODEX_MODE: gateway
@@ -50,8 +51,8 @@ services:
       NODE_OPTIONS: --max-old-space-size=1536
     networks: [test]
   fixture:
-    image: work-n8n-codex-v005-fixture:0.0.5
-    container_name: work-n8n-codex-v005-fixture
+    image: work-n8n-codex-v010-fixture:${BUILD_CHECKPOINT:?Set the prepared checkpoint}
+    container_name: work-n8n-codex-v010-fixture
     build:
       context: ${QUALIFICATION_ROOT}/build-output/${BUILD_CHECKPOINT}
       dockerfile: fixture.Dockerfile
@@ -67,5 +68,5 @@ services:
     networks: [test]
 networks:
   test:
-    name: work-n8n-codex-v005-test
+    name: work-n8n-codex-v010-test
     internal: true

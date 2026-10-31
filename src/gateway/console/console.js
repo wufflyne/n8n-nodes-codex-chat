@@ -620,15 +620,26 @@ async function renderConnections() {
       edit.append(row);
       candidates.push(checkbox);
     }
+    const priority = el("p", "", "muted");
+    const showPriority = () => {
+      const selected = candidates.filter((value) => value.checked).map((value) => value.value);
+      const order = [...p.profiles.filter((id) => selected.includes(id)), ...selected.filter((id) => !p.profiles.includes(id))];
+      priority.textContent = "Effective priority: " + order.map((id, index) => `${index + 1}. ${accounts.find((a) => a.profileId === id)?.account.label ?? id}`).join(" → ");
+    };
+    candidates.forEach((checkbox) => checkbox.addEventListener("change", showPriority));
+    showPriority();
+    edit.append(priority);
     const allowed = field(edit, "Allowed models for " + p.name);
     allowed.value = p.allowedModels.join(", ");
     edit.append(
       button(
         "Save policy",
         async () => {
-          const profiles = candidates
-            .filter((value) => value.checked)
-            .map((value) => value.value);
+          const selected = candidates.filter((value) => value.checked).map((value) => value.value);
+          const profiles = [
+            ...p.profiles.filter((id) => selected.includes(id)),
+            ...selected.filter((id) => !p.profiles.includes(id)),
+          ];
           if (!profiles.length || (p.mode === "fixed" && profiles.length !== 1))
             throw Error(
               "Choose exactly one account for a fixed connection, or at least one pool candidate.",

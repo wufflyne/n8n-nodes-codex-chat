@@ -3,7 +3,7 @@
 # Keep administration behind loopback or an operator-controlled HTTPS ingress.
 services:
   codex-wire-gateway:
-    image: codex-wire-gateway:0.0.5
+    image: codex-wire-gateway:0.1.0
     stop_grace_period: 120s
     restart: unless-stopped
     cpus: 1.0

@@ -1,45 +1,44 @@
 # Qualification and distribution
 
-Codex Wire 0.0.5 is qualified with synthetic accounts and provider responses on Linux amd64, Node 26.12.1, n8n 2.45.6, n8n-workflow 2.45.3 and LangChain Core 1.2.8. Standalone Agents use @n8n/agents 0.30.5, AI SDK 7.0.74 and OpenAI provider 4.0.20. This is an independent integration with a private subscription backend; these tests do not establish live entitlement, provider stability, model quality or cache savings.
+Codex Wire 0.1.0 targets Linux amd64, Node 26.12.1, n8n 2.45.6, n8n-workflow 2.45.3 and LangChain Core 1.2.8. Standalone Agents use @n8n/agents 0.30.5, AI SDK 7.0.74 and OpenAI provider 4.0.20. [Compatibility metadata](../compatibility.json) and the exact release receipt identify the artifact bytes and qualification scope. Synthetic installed behavior, bounded live observations and public-registry installation are separate checks; historical release results do not qualify changed code.
 
-## Install matched artifacts
+## Matched artifacts
 
-The local distribution contains one `n8n-nodes-codex-chat-0.0.5.tgz`, a matched gateway/n8n image archive, context manifest, dependency lock and SHA256 checksums. The image archive excludes synthetic provider images and private runtime data. Verify the supplied checksums before loading images, then compare loaded image IDs with the distribution receipt. The receipt identifies exact source, package, context/overlay and image bytes. Keep the prior images and latest compatible state for rollback.
+The distribution uses one `n8n-nodes-codex-chat-0.1.0.tgz`, matched gateway/n8n images, lifecycle and security manifests, dependency locks and SHA256 checksums. Verify checksums and loaded image IDs before deployment. Keep code backups separate from the latest rotating-token state. Synthetic provider images, qualification credentials and task-only account-preservation tooling are excluded from public artifacts.
 
-[Installation](install.md) describes embedded/community loading. [Gateway setup](gateway.md) describes companion assembly, separate inference/admin listeners, protected configuration and the required lifecycle integration. Installing the npm package does not launch the gateway. Stock n8n without the matched lifecycle overlay supports a fixed connection, not the full authenticated pool.
+The npm package installs four native nodes; it never starts a gateway or patches host dependencies automatically. The complete companion build requires the source checkout and the [separate security layer](security.md). Native community installation on that image must preserve the actual host LangChain/n8n-workflow object identities, without private peer copies or community-root peer symlinks.
 
-The community rehearsal installs the actual local tarball using pinned stock installer semantics and runtime dependencies. All four existing node identifiers, credential fields and host class identities are checked; no private LangChain copies or community-root peer symlink are used. The default matched n8n image can run standalone Agents without loading community nodes; community installation remains explicit.
+Artifact variants remain distinct. The bounded build's `integration/qualification/Dockerfile.n8n` installs the lifecycle/security overlays and starts with an empty custom-extension path; Agents-only and subsequent community-loader runs qualify it separately. The root `Dockerfile.n8n` used by `release:local` builds the legacy CUSTOM embedded image with security patches and no standalone lifecycle overlay. Its release manifest explicitly labels that variant. Tags, helper locations and namespaces require their matching receipt; a native CUSTOM smoke cannot qualify an Agents companion or community installer.
 
-## Tested contracts
+## Finite acceptance surfaces
 
-| Surface | Synthetic coverage |
+| Surface | Required evidence |
 | --- | --- |
-| Native workflows | Standard/Lite tools, Code/HTTP/Workflow tools, Router sticky continuation, model selector, simple memory, structured parser/chain/extractor/classifier, image binary, account visibility and execution usage |
-| Standalone Agents | Actual server/API/database turns, reasoning continuity, approval/checkpoint restart, saved/inline/background children, helper/title/observation/reflector work and supplied-history truncation |
-| Pool | 32 profiles, last eligible selection, 31 fresh quota denials, independent branches, account pinning and shared two-request account bound across native/Responses aliases |
-| Continuity | Connection/account/model/known codec/branch ownership, item and call mappings, completed-operation replay, process restart, explicit legacy failure and immutable retry issuance |
-| Safety | Malformed/late/disconnected output, no executable tools before validation/commit, actual SQLite FULL, capacity/retention, cancellation, shared renewal, failed startup and shutdown fences |
-| Privacy and console | Explicit store:false DB/WAL/decrypted-content canaries, separate role keys, protected bootstrap/session/CSRF, interrupted one-time delivery recovery, delayed real-HTTP UI races and bounded device work |
-| Packaging | Locked clean build, peer-free gateway imports, matched overlay, exact tarball inventory, clean image contents and actual archive save/load identity |
+| Native workflows | Embedded/remote × Standard/Lite; tools, memory, parser/chain/extractor/classifier, Router, account operations, photos and native image bytes |
+| Standalone Agents | Both codecs × stored/stateless × streaming/nonstreaming; actual loaded host turns, helpers, checkpoint/retry, observer/reflector, episodic memory and saved/inline foreground/background children |
+| Accounts and continuity | Exact-token ownership, raw-success capture and local promotion, same/omitted replacement epochs, legacy migration, 32-profile order, shared two-slot account limit, quota-only fresh fallback and permanent branch pins |
+| Safety and privacy | Invalid reset preflight, no executable malformed terminal, protected console/Origin/CSRF, device pending/cancel, explicit store:false canaries and no idle polling |
+| Faults and resources | Admission/overload, restart, actual SQLite FULL separately from injected ENOSPC, graceful drain separately from forced-stop fences, current-state transfer and old-binary refusal |
+| Distribution | Source/dependency/type differential, complete image including OS/all package copies, installed peers, same-origin cached editor transition, exact tarball/image lineage |
 
-Retained Standard and Lite history never crosses codecs merely because model ID/account/branch stay the same. Missing or unknown pre-release codec proof returns `history_scope_unproven` before generation or completed response replay. No history is silently converted, dropped or restored. Published 0.0.4 had no gateway retained history, so its workflows, profiles and bindings remain compatible. See [recovery](gateway.md#retention-and-bounded-behavior).
+Native opaque metadata v2 binds the account, exact model and known codec. Old v1 memory is preserved and explicitly rejected, with export/new-session guidance. Retained standalone history also keeps connection/account/model/codec/branch proof. No guessed migration or silent history removal is permitted.
 
-Episodic memory requires its own compatible embedding backend. Synthetic qualification uses a separate embedding credential/provider; Codex Wire does not implement embeddings. The exact pinned standalone runtime exposes no user fork/regenerate endpoint; independent branch isolation is tested without claiming such a UI.
+Episodic memory uses a separate compatible embedding provider; Codex Wire does not implement embeddings. The pinned standalone runtime has no user fork/regenerate endpoint. Independent branch isolation does not establish such a UI.
 
-The lifecycle patch is narrow and version matched. Its NodeNext type differential has six baseline diagnostics, six patched diagnostics and zero introduced diagnostics. This is not a clean full upstream monorepo typecheck.
+The Agents source differential retains six known baseline diagnostics and introduces none. The broader lifecycle/security check uses exact restored published declarations and records original-dependency, updated-dependency and patched-source results separately. It is not a clean full upstream monorepo typecheck.
 
 ## Resource and performance interpretation
 
-Tests use real private HTTP sockets and fixed cgroup limits: gateway 1 CPU/512 MiB, n8n 2 CPU/2 GiB and synthetic provider 0.5 CPU/128 MiB. Runtime external egress is disabled. Browser tests use a process-local route into those private addresses with Host/Origin/cookies preserved; they do not establish normal localhost reachability or streaming latency. Direct sockets measure streaming/backpressure.
+The synthetic lab uses gateway 1 CPU/512 MiB, n8n 2 CPU/2 GiB and fixture 0.5 CPU/128 MiB, with external runtime egress disabled. Final load gates include 120-second steady runs at 1/8/32 offered concurrency, eight held requests plus a 70-request burst against the 64-entry queue, and 120 seconds idle. Reports retain actual RSS, CPU, event-loop delay, queue outcomes and provider-attempt counts.
 
-Comparisons use identical canonical model inputs and provider chunk delays across published embedded, extracted embedded, native RPC and Responses paths at concurrency 1/2/8. Cold groups restart adapter processes and gateway/catalog/state workers while retaining durable DB and OS caches. Reports separate account queue wait from adapter latency and retain attempts, exact usage, CPU/RSS, event-loop delay and persisted-byte changes. Ten warm samples at concurrency one are descriptive, not an SLA. No synthetic timing measures live model quality or subscription savings.
+Matched comparisons preserve payload, settings, model, tool count and provider delays. A candidate p95 exceeding baseline by both 2× and 50 ms, or idle RSS growth above 64 MiB, requires investigation and an explicit disposition. A host-side journal capacity test does not prove the gateway cgroup can promote a near-64 MiB journal while admitted request memory is held; that boundary remains a separate physical gate.
 
-Eight supported requests, each containing two 2.75 MiB images, produced three successes and five pre-admission capacity refusals under the gateway limit, with no gateway OOM. Larger input beyond the expanded-history bound is rejected before inference; that is not positive large-image support. SQLite FULL is induced with an actual database page limit; host OS ENOSPC is not simulated. A deliberately stalled shutdown preserves its owner fence and may require SIGKILL after the grace period; it is not a successful graceful exit.
+SQLite FULL must use an actual database page limit. Injected filesystem errors are labeled as injection; the host disk is never filled. A forced stop that retains its owner fence is a safety result, not a successful graceful shutdown. No synthetic timing establishes model quality, live entitlement or subscription/cache savings.
 
 ## Deliberate limits
 
-Assistant Chat Completions, embeddings, public image routes, hosted provider tools, direct PDF/audio/video, image editing, unknown codecs, distributed/multiworker ownership and purchases/top-ups are unsupported. Native image generation remains an explicit workflow action. Arbitrary external tool side effects do not gain a general exactly-once guarantee from gateway operation deduplication.
+Assistant Chat Completions, Codex embeddings, public image routes, hosted provider tools, direct PDF/audio/video, image editing, unknown codecs, distributed/multiworker ownership and purchases/top-ups are unsupported. Native image generation is an explicit workflow action. External tool side effects receive no general exactly-once guarantee.
 
-All real-account 0.0.5 device consent, rotating renewal, multiple-account entitlement, reset spending, image generation, model quality and cache economics remain unqualified. Historical 0.0.4 live observations in [compatibility metadata](../compatibility.json) describe only that baseline. Publication and deployment are separate operator decisions.
+Live evidence is reported by exact account entitlement and codec. Provider limitations may constrain those observations; they never excuse credential-safety failures. Production publication and deployment require the final accepted artifact receipt.
 
 By [wufflyne](https://wufflyne.com).

@@ -11,6 +11,7 @@ import { throwIfAborted, waitForSignal } from "./core/http.js";
 import { parseManualTokens } from "./auth/sessions.js";
 import { ControlClient } from "./service/control-client.js";
 import { readPrivateFile } from "./auth/store.js";
+import { WireError } from "./gateway/errors.js";
 
 async function readInput(filename: string, signal?: AbortSignal): Promise<unknown> {
   let data: string;
@@ -90,7 +91,7 @@ async function main(): Promise<void> {
   const command = positionals[0];
   if (values.help || !command) {
     process.stdout.write(
-      "Codex Account Helper (Experimental)\n\nCommands:\n  keygen --output <protected-env-file>\n  device-login --label <name> --binding-output <new-file>\n  import --format token-set|codex-auth-json --input <protected-file|-> --label <name> --binding-output <new-file>\n  device-login|import ... --reconnect <existing-binding-file>\n  status --binding <protected-binding-file>\n\nUse --online with N8N_CODEX_ADMIN_URL and N8N_CODEX_ADMIN_TOKEN_FILE. Existing standalone commands select offline maintenance through N8N_CODEX_STORE_DIR and N8N_CODEX_STORE_KEY; --offline is optional. Mutations require stopped store users. Status and doctor stay local and read-only. Tokens are never accepted on the command line. Device login is beta and uses the experimental Codex client contract.\nCreated by wufflyne — https://wufflyne.com\n",
+      "Codex Account Helper (Experimental)\n\nCommands:\n  keygen --output <protected-env-file>\n  device-login --label <name> --binding-output <new-file>\n  import --format token-set|codex-auth-json --input <protected-file|-> --label <name> --binding-output <new-file>\n  device-login|import ... --reconnect <existing-binding-file>\n  status --binding <protected-binding-file>\n  recover --offline --binding <protected-binding-file>\n\nUse --online with N8N_CODEX_ADMIN_URL and N8N_CODEX_ADMIN_TOKEN_FILE. Existing standalone commands select offline maintenance through N8N_CODEX_STORE_DIR and N8N_CODEX_STORE_KEY; --offline is optional. Mutations require stopped store users. Status and doctor stay local and read-only. Tokens are never accepted on the command line. Device login is beta and uses the experimental Codex client contract.\nCreated by wufflyne — https://wufflyne.com\n",
     );
     return;
   }
@@ -193,6 +194,12 @@ async function main(): Promise<void> {
   const rt = runtimeFromEnvironment({ readOnly: command === "status" || command === "doctor" });
   try {
     await rt.store.ready();
+    if (command === "recover") {
+      assert(values.binding, "Specify the protected binding file with --binding for offline captured-renewal recovery.");
+      await rt.sessions.recover(credentialBinding(await readInput(values.binding)));
+      process.stdout.write("Captured renewal verified and durably promoted. No refresh request was sent.\n");
+      return;
+    }
     if (command === "status" || command === "doctor") {
       assert(values.binding, "Specify the protected binding file with --binding.");
       const profile = await rt.store.read(credentialBinding(await readInput(values.binding)));
@@ -296,6 +303,11 @@ async function main(): Promise<void> {
 }
 
 void main().catch((error) => {
+  if (error instanceof WireError && ["owner_conflict", "owner_compatibility", "owner_directory"].includes(error.code)) {
+    process.stderr.write(`${error.code}: ${error.message}\n`);
+    process.exitCode = 1;
+    return;
+  }
   const safe = safeError(error);
   process.stderr.write(
     `${safe.category === "cancelled" ? "cancelled_before_commit: " : safe.category === "reconnect" ? "reconnect_required: " : ""}${safe.message}\n`,

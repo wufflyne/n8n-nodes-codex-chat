@@ -31,12 +31,12 @@ test('Native V3 split parallel calls recover exactly one original provider group
 test('Replay rejects account/route changes, tampered args, unknown IDs and in-flight restart',()=>{
  const replay=new ReplayLedger();replay.remember(metadata);
  const changed=part(1);changed.tool_calls[0].args={value:99};
- assert.throws(()=>replay.restore(changed,session(),'responses'),/arguments differ/);
- assert.throws(()=>replay.restore(part(1),session('other'),'responses'),/another account/);
- assert.throws(()=>replay.restore(part(1),session(),'responses-lite'),/another account or route/);
- assert.throws(()=>new ReplayLedger().restore(part(1),session(),'responses'),/process restart/);
- assert.throws(()=>replay.restore(part(9),session(),'responses'),/metadata is missing/);
- replay.clear();assert.throws(()=>replay.restore(part(1),session(),'responses'),/metadata is missing/);
+ assert.throws(()=>replay.restore(changed,session(),'responses',model.slug),/arguments differ/);
+ assert.throws(()=>replay.restore(part(1),session('other'),'responses',model.slug),/different account/);
+ assert.throws(()=>replay.restore(part(1),session(),'responses-lite',model.slug),/different account/);
+ assert.throws(()=>new ReplayLedger().restore(part(1),session(),'responses',model.slug),/process restart/);
+ assert.throws(()=>replay.restore(part(9),session(),'responses',model.slug),/metadata is missing/);
+ replay.clear();assert.throws(()=>replay.restore(part(1),session(),'responses',model.slug),/metadata is missing/);
 });
 
 test('Replay size/group/reused-ID limits fail closed and clear releases capacity',()=>{

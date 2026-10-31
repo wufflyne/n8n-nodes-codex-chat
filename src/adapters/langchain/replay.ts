@@ -4,6 +4,38 @@ import { wireName } from "../../core/tool-names.js";
 import { assert, record } from "../../core/errors.js";
 import type { ReplayMetadata } from "../../core/codec.js";
 import type { Session } from "../../core/types.js";
+import { outputText } from "../../kernel/completion.js";
+
+export function validateReplayProvenance(metadata: ReplayMetadata, session: Session, model: string, wire: ReplayMetadata["wire"]): void {
+  assert(metadata.version === 2, "Legacy Codex replay metadata cannot be reused safely. Preserve or export the old memory, then begin a separately named new memory session.");
+  assert(metadata.provider === "codex-subscription-experimental" && metadata.affinity === session.affinity && metadata.model === model && metadata.wire === wire && metadata.codec === (wire === "responses" ? "responses-v1" : "responses-lite-v1") && Array.isArray(metadata.items), "History belongs to a different account, exact model or known codec. Preserve the memory and use a separate session.");
+}
+function visibleText(message: AIMessage): string {
+  if (typeof message.content === "string") return message.content;
+  return message.content.map((raw) => {
+    const block = record(raw);
+    assert(["text", "input_text", "output_text"].includes(String(block.type)) && typeof block.text === "string", "Saved assistant text contains an unsupported visible block.");
+    return block.text;
+  }).join("");
+}
+export function validateReplayFull(message: AIMessage, metadata: ReplayMetadata): void {
+  assert(visibleText(message) === outputText({ id: "projection", status: "completed", output: metadata.items }), "Visible assistant text differs from saved provider history.");
+  const originals = metadata.items.filter((item) => item.type === "function_call");
+  if (metadata.diagnostic === "owned-structured-output") {
+    const invalid = message.invalid_tool_calls ?? [];
+    assert(!(message.tool_calls ?? []).length && invalid.length === originals.length, "Visible structured diagnostics differ from saved provider history.");
+    invalid.forEach((call, index) => {
+      const original = originals[index]!;
+      assert(call.id === original.call_id && wireName(call.name ?? "") === original.name && call.args === original.arguments && call.error === "Invalid owned structured output.", "Visible structured diagnostics differ from saved provider history.");
+    });
+    return;
+  }
+  assert(!(message.invalid_tool_calls ?? []).length && (message.tool_calls ?? []).length === originals.length, "Visible tool call membership differs from saved provider history.");
+  (message.tool_calls ?? []).forEach((call, index) => {
+    assert(call.id === originals[index]!.call_id, "Visible tool call order differs from saved provider history.");
+  });
+  validateReplayPart(message, metadata);
+}
 
 /** n8n Agent V3 reconstructs tool messages without generic provider metadata. */
 export class ReplayLedger {
@@ -41,7 +73,7 @@ export class ReplayLedger {
     ReplayLedger.totalBytes += bytes;
   }
 
-  restore(message: AIMessage, session: Session, wire: ReplayMetadata["wire"]): ReplayMetadata {
+  restore(message: AIMessage, session: Session, wire: ReplayMetadata["wire"], model: string): ReplayMetadata {
     const calls = message.tool_calls ?? [];
     assert(calls.length > 0, "A reconstructed tool message has no calls.");
     const metadata = this.entries.get(calls[0]!.id ?? "");
@@ -49,10 +81,7 @@ export class ReplayLedger {
       metadata,
       "Provider replay metadata is missing. In-flight tool continuation after a process restart is unsupported; restart this Agent execution with a complete memory session.",
     );
-    assert(
-      metadata.affinity === session.affinity && metadata.wire === wire,
-      "Replay state belongs to another account or route. Use a separate memory session.",
-    );
+    validateReplayProvenance(metadata, session, model, wire);
     assert(
       calls.every((call) => this.entries.get(call.id ?? "") === metadata),
       "Reconstructed tool calls combine different provider responses.",
@@ -77,6 +106,9 @@ export function validateReplayPart(message: AIMessage, metadata: ReplayMetadata)
   const originals = metadata.items.filter((item) => item.type === "function_call");
   const part = message.additional_kwargs.codex_replay_part;
   const calls = message.tool_calls ?? [];
+  assert(!(message.invalid_tool_calls ?? []).length, "Split replay cannot contain invalid tool diagnostics.");
+  const text = visibleText(message);
+  assert(!text || text === outputText({ id: "projection", status: "completed", output: metadata.items }), "Visible split assistant text differs from saved provider history.");
   if (part !== undefined)
     assert(
       Array.isArray(part) &&

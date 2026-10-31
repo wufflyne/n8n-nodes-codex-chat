@@ -1,7 +1,7 @@
 name: codex-wire-n8n
 services:
   n8n:
-    image: codex-wire-v0-0-5-n8n:0.0.5
+    image: codex-wire-n8n:0.1.0
     restart: unless-stopped
     ports:
       - "127.0.0.1:5678:5678"

@@ -13,7 +13,7 @@ import type { TransportEvent } from "../core/transport.js";
 import type { executionUsage } from "../core/execution-usage.js";
 
 export const PROTOCOL_VERSION = 1 as const;
-export const RELEASE = "0.0.5";
+export const RELEASE = "0.1.0";
 export interface ModelIdentity {
   affinity: string;
   generation: number;
@@ -21,6 +21,7 @@ export interface ModelIdentity {
   routingIdentity?: string;
 }
 export interface NativeGeneration {
+  outputContract?: import("../kernel/output-contract.js").OutputContract;
   request: ResponseRequest;
   settings: ModelSettings;
   lite: boolean;

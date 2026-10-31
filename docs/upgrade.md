@@ -1,17 +1,21 @@
 # Upgrade and rollback
 
-v0.0.5 preserves package/internal node/credential/helper IDs, existing serialized parameter paths, profile/envelope v1, binding secrets, master key and normal managed renewal policy. New display metadata is optional; reading an old profile does not rewrite it. `resets/` is additive and ignored by the old package; preserve it through rollback/reupgrade.
+Version 0.1.0 preserves package, node, credential and helper identifiers, existing workflow parameters, profile/envelope v1, protected bindings and the master key. It adds a store-wide encrypted token-ownership and renewal journal. This is a one-way safety-format upgrade: v0.0.5 and older binaries cannot safely own the migrated store.
 
-1. Stop workflow users and the affected n8n process. Record image/package/source/Compose identifiers.
-2. Back up n8n state, complete profile store including reset ledgers/import fences, protected bindings and the separately stored master key. Keep permissions and never dump secrets into diagnostics.
-3. Install the reviewed npm version or local image artifact with exactly the pinned peers. Reuse original volumes/key/bindings; do not run keygen for an upgrade. Do not convert existing workflow namespaces automatically.
-4. Start, check health/node discovery, local credential status and one harmless test workflow. Confirm ordinary defaults and configured model settings.
-5. Retain all rollback archives until tests pass and the user confirms the result.
+1. Pause new executions, drain active work and stop every old owner. Record the exact image, package and configuration identities. Fence other processes and devices that could renew the same token family.
+2. Preserve the complete current store, reset ledgers, import fences, protected bindings and separately stored key. Keep the backup private. It is evidence and disaster-recovery material, not permission to replay old rotating tokens.
+3. Install the matched 0.1.0 package/image and peers. Reuse the same volumes, key and bindings; never generate a replacement key during upgrade.
+4. The first owning access performs a resumable local migration before provider dispatch. Duplicate legacy refresh-token families are all blocked; the migration never elects one, merges them or renews a token. Resolve duplicates with independent logins.
+5. Check local status, node discovery and a harmless workflow before resuming admissions. Retain prior code and audit artifacts until the operator accepts the result.
 
-To roll back application code, stop users, restore the saved image/package/Compose and preserve the current profile/reset store and key. Old code accepts additive display fields. A provider reset cannot be undone by restoring files; never overwrite an unresolved ledger with an older backup to force another consume. Re-upgrade and explicitly reconcile the same persisted intent when needed. Rotating-token unknown outcomes/import fences also remain conservative and require a fresh reconnect when appropriate.
+The permanent `.codex-wire-owner/format.json` guard occupies the verified v0.0.5 owner's lock path, including after clean shutdown. The active v0.1.0 owner uses `.codex-wire-owner-v2`. An existing unknown old lock is never automatically converted or unlocked by age. An abandoned active lock requires deliberate offline investigation after every possible writer is stopped.
 
-The release script does not update existing n8n instances. It builds versioned images and tests disposable volumes; deploy to an existing instance only after checking its backup and rollback plan.
+Preserve `.rotation-v2.json.enc`, `.rotation-v2.initialized`, captured responses, reset journals and `.import-*.used` fences together. Renewal records are never evicted to make old credentials reusable. Store transfer copies these guards and journals and excludes only the active new owner lock. Use the [gateway current-store transfer](gateway.md#upgrade-and-recovery) when changing owners; remove the old owner's access before starting the replacement.
 
-For a gateway upgrade, follow [sole-owner drain and current-store transfer](gateway.md#upgrade-and-recovery). Pre-release retained gateway history without a route/codec marker cannot be reused safely; it returns an explicit error and stays preserved for deliberate recovery. Start a new conversation when its original scope cannot be proved. Existing 0.0.4 profile/binding/workflow data does not require this marker. Never restore an older gateway binary to bypass a continuity error.
+Rollback is limited to compatible application code that understands the current token journal and guard. Keep the newest credential generation and all safety state. The verified v0.0.5 owner refuses this store even after a clean stop. All older/custom owners are unsupported and unsafe; v0.0.4 or low-level clients that ignore owner locks require operational revocation of their key/store access. The filesystem guard cannot control such programs. Never remove the permanent guard or restore an older token snapshot to bypass this refusal. Provider token rotation and reset spending cannot be undone by restoring files.
+
+Native opaque memory now uses metadata v2 bound to the exact account, model and known codec. Old v1 or unproven opaque memory is rejected with a controlled error. Preserve or export it, then start a deliberate new memory session; do not edit its model marker, strip metadata or silently reuse it with another model. Ordinary visible messages without opaque metadata retain their supported behavior.
+
+An awaited encrypted success capture may permit identity-verified local recovery after a parsing, verification or commit failure. Recovery never renews again. Lost responses or failed capture writes cannot be reconstructed; preserve the evidence and reconnect with an independent login. The [maintenance helper procedure](install.md#recover-a-captured-successful-renewal) explains the stopped-owner requirements.
 
 By [wufflyne](https://wufflyne.com).

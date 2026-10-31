@@ -184,7 +184,7 @@ test('An ambiguous imported renewal cannot be retried with the same rotating tok
   const { store } = await storeFor(t); let refreshes = 0;
   const auth = { verify: async candidate => ({ identity: identity(), tokens: candidate }), refresh: async () => { refreshes++; throw new Error('SYNTHETIC_AMBIGUOUS'); } };
   await assert.rejects(new AccountSessionManager(store, auth).importTokens(tokens({ expiresAt: 0 }), 'First attempt'));
-  await assert.rejects(new AccountSessionManager(store, auth).importTokens(tokens({ expiresAt: 0 }), 'Retry'), /already used|claimed safely/);
+  await assert.rejects(new AccountSessionManager(store, auth).importTokens(tokens({ expiresAt: 0 }), 'Retry'), /already used|claimed safely|already owned/);
   assert.equal(refreshes, 1);
 });
 

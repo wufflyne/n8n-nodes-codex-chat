@@ -1,0 +1,23 @@
+{
+  "name": "codex-wire-pinned-security-overlay",
+  "version": "0.1.0",
+  "private": true,
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.0",
+    "@modelcontextprotocol/server": "2.3.0",
+    "@modelcontextprotocol/core": "2.3.0",
+    "@modelcontextprotocol/node": "2.1.0",
+    "zod": "3.25.76",
+    "undici6": "npm:undici@6.29.1",
+    "undici7": "npm:undici@7.30.1",
+    "body-parser": "2.4.0",
+    "follow-redirects": "1.16.2",
+    "multer": "2.5.0",
+    "markdown-it": "13.0.2"
+  },
+  "overrides": {
+    "markdown-it": {
+      "linkify-it": "5.0.2"
+    }
+  }
+}

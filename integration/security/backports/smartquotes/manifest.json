@@ -1,0 +1,8 @@
+{
+  "source": "https://registry.npmjs.org/markdown-it/-/markdown-it-14.3.2.tgz",
+  "gitHead": "efb9993124c3eb229eea24dd659c91dcee7f6d60",
+  "algorithmSha256": "2d92309d2a0517b7ac74ba6780333996ff3bf0763e28464916f04befdddb4dee",
+  "target": "markdown-it@13.0.2",
+  "targetSha256": "91098517a15a71f01bac6f0ef73b98d11f3c20505d4bafa1fca5a1e4775f3ef8",
+  "bundleModuleSha256": "8c807cc809d0d922e24b1017041589919901e840d9c97f510e1ae2bb68ab7dc5"
+}

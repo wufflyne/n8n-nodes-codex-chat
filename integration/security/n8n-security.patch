@@ -1,0 +1,329 @@
+--- a/packages/@n8n/ai-utilities/package.json
++++ b/packages/@n8n/ai-utilities/package.json
+@@ -42,6 +42,9 @@
+       ],
+       "model-discovery": [
+         "dist/esm/model-discovery/index.d.ts"
++      ],
++      "mcp-input-limits": [
++        "dist/esm/utils/mcp-input-limits.d.ts"
+       ]
+     }
+   },
+@@ -111,7 +114,12 @@
+       "import": "./dist/esm/model-discovery/index.js",
+       "require": "./dist/cjs/model-discovery/index.js"
+     },
+-    "./*": "./*"
++    "./*": "./*",
++    "./mcp-input-limits": {
++      "types": "./dist/esm/utils/mcp-input-limits.d.ts",
++      "import": "./dist/esm/utils/mcp-input-limits.js",
++      "require": "./dist/cjs/utils/mcp-input-limits.js"
++    }
+   },
+   "scripts": {
+     "clean": "rimraf dist .turbo",
+--- /dev/null
++++ b/packages/@n8n/ai-utilities/src/utils/mcp-input-limits.ts
+@@ -0,0 +1,34 @@
++/** Bounds shared by the parsed-body and low-level MCP entry points. */
++export const MCP_MAX_BODY_BYTES: number = 1024 * 1024;
++export const MCP_MAX_TOOL_ELEMENTS: number = 10000;
++export const MCP_MAX_BATCH_MESSAGES: number = 100;
++
++export function assertMcpToolInputLimit(value: unknown): void {
++	let count = 0;
++	const pending: unknown[] = [value];
++	while (pending.length > 0) {
++		const current = pending.pop();
++		if (current === null || typeof current !== 'object') continue;
++		for (const key in current) {
++			if (!Object.prototype.hasOwnProperty.call(current, key)) continue;
++			if (++count > MCP_MAX_TOOL_ELEMENTS) {
++				throw new RangeError('MCP tool arguments exceed the 10000-element limit');
++			}
++			const child = (current as Record<string, unknown>)[key];
++			if (child !== null && typeof child === 'object') pending.push(child);
++		}
++	}
++}
++
++export function assertMcpMessageLimits(value: unknown): void {
++	const messages: unknown[] = Array.isArray(value) ? value : [value];
++	if (messages.length > MCP_MAX_BATCH_MESSAGES) {
++		throw new RangeError('MCP request exceeds the 100-message batch limit');
++	}
++	for (const message of messages) {
++		if (message === null || typeof message !== 'object') continue;
++		const request = message as Record<string, unknown>;
++		if (request.method !== 'tools/call' || request.params === null || typeof request.params !== 'object') continue;
++		assertMcpToolInputLimit((request.params as Record<string, unknown>).arguments);
++	}
++}
+--- a/packages/@n8n/mcp-browser/src/server.ts
++++ b/packages/@n8n/mcp-browser/src/server.ts
+@@ -172,6 +172,7 @@
+ 		// guard above handles that. DNS-rebinding protection on the Host header
+ 		// still adds value when bound to loopback, so keep it enabled there.
+ 		const transport = new StreamableHTTPServerTransport({
++			maxRequestBodySize: 1024 * 1024,
+ 			sessionIdGenerator: () => randomUUID(),
+ 			enableDnsRebindingProtection: allowedHosts !== undefined,
+ 			allowedHosts,
+@@ -196,7 +197,7 @@
+ 		};
+ 		trackRequest(transport, res);
+ 
+-		const mcpServer = new McpServer({ name: 'n8n-browser', version: '1.0.0' });
++		const mcpServer = new McpServer({ name: 'n8n-browser', version: '1.0.0' }, { maxToolInputElements: 10000 });
+ 		registerTools(mcpServer, tools);
+ 
+ 		void mcpServer.connect(transport).then(() => {
+@@ -272,7 +273,7 @@
+ 		};
+ 	} else {
+ 		const { tools, connection } = createBrowserTools(config);
+-		const server = new McpServer({ name: 'n8n-browser', version: '1.0.0' });
++		const server = new McpServer({ name: 'n8n-browser', version: '1.0.0' }, { maxToolInputElements: 10000 });
+ 		registerTools(server, tools);
+ 		const transport = new StdioServerTransport();
+ 		await server.connect(transport);
+--- a/packages/@n8n/nodes-langchain/nodes/mcp/McpTrigger/McpServer.ts
++++ b/packages/@n8n/nodes-langchain/nodes/mcp/McpTrigger/McpServer.ts
+@@ -1,3 +1,4 @@
++import { assertMcpToolInputLimit } from '@n8n/ai-utilities/mcp-input-limits';
+ import type { Tool } from '@langchain/core/tools';
+ import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+ import type { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
+@@ -613,6 +614,7 @@
+ 		);
+ 
+ 		server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
++			assertMcpToolInputLimit(request.params.arguments);
+ 			if (!extra.sessionId) {
+ 				throw new OperationalError('Require a sessionId for the tool call');
+ 			}
+--- a/packages/@n8n/nodes-langchain/nodes/mcp/McpTrigger/transport/StreamableHttpTransport.ts
++++ b/packages/@n8n/nodes-langchain/nodes/mcp/McpTrigger/transport/StreamableHttpTransport.ts
+@@ -1,3 +1,4 @@
++import { MCP_MAX_BODY_BYTES } from '@n8n/ai-utilities/mcp-input-limits';
+ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+ import type { StreamableHTTPServerTransportOptions } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+ import type { JSONRPCMessage } from '@modelcontextprotocol/sdk/types.js';
+@@ -30,7 +31,7 @@
+ 	private response: CompressionResponse;
+ 
+ 	constructor(options: StreamableHTTPServerTransportOptions, response: CompressionResponse) {
+-		super(options);
++		super({ ...options, maxRequestBodySize: MCP_MAX_BODY_BYTES });
+ 		this.response = response;
+ 	}
+ 
+--- a/packages/cli/src/middlewares/body-parser.ts
++++ b/packages/cli/src/middlewares/body-parser.ts
+@@ -1,3 +1,4 @@
++import { assertMcpMessageLimits, MCP_MAX_BODY_BYTES } from '@n8n/ai-utilities/mcp-input-limits';
+ import { parseIncomingMessage } from '@n8n/backend-network';
+ import { GlobalConfig } from '@n8n/config';
+ import { Container } from '@n8n/di';
+@@ -5,11 +6,14 @@
+ import { jsonParse, sanitizeXmlName } from 'n8n-workflow';
+ import { parse as parseQueryString } from 'querystring';
+ import getRawBody from 'raw-body';
+-import { type Readable } from 'stream';
+ import { Parser as XmlParser } from 'xml2js';
+ import { createGunzip, createInflate } from 'zlib';
+ 
+-import { BadRequestError, UnprocessableRequestError } from '@n8n/errors';
++import { BadRequestError, ContentTooLargeError, UnprocessableRequestError } from '@n8n/errors';
++
++import { sendErrorResponse } from '@/response-helper';
++
++const requestBodyLimits = new WeakMap<Request, number>();
+ 
+ // One parser per request: xml2js keeps parse state on the instance, and async
+ // mode spreads large bodies over several ticks.
+@@ -44,31 +48,25 @@
+ 
+ 	req.readRawBody = async () => {
+ 		if (!req.rawBody) {
+-			let stream: Readable = req;
+-			let contentLength: string | undefined;
+ 			const contentEncoding = req.headers['content-encoding'];
+-			switch (contentEncoding) {
+-				case 'gzip':
+-					stream = req.pipe(createGunzip());
+-					break;
+-				case 'deflate':
+-					stream = req.pipe(createInflate());
+-					break;
+-				default:
+-					contentLength = req.headers['content-length'];
+-			}
+-
+-			// Client aborted before we read the body: treat as client error, not a 500.
+-			if (req.destroyed || !stream.readable) {
+-				throw new BadRequestError('Request body stream was aborted or is not readable');
+-			}
++			const decoder = contentEncoding === 'gzip' ? createGunzip()
++				: contentEncoding === 'deflate' ? createInflate() : undefined;
++			const stream = decoder ? req.pipe(decoder) : req;
++			const contentLength = decoder ? undefined : req.headers['content-length'];
+ 
+ 			try {
++				if (req.destroyed || !stream.readable) {
++					throw new BadRequestError('Request body stream was aborted or is not readable');
++				}
+ 				req.rawBody = await getRawBody(stream, {
+ 					length: contentLength,
+-					limit: `${String(payloadSizeMax)}mb`,
++					limit: requestBodyLimits.get(req) ?? `${String(payloadSizeMax)}mb`,
+ 				});
+ 			} catch (error) {
++				if (requestBodyLimits.has(req) && error instanceof Error &&
++					'type' in error && error.type === 'entity.too.large') {
++					throw new ContentTooLargeError('MCP request exceeds the 1 MiB body limit');
++				}
+ 				if (isClientAbortError(error)) {
+ 					throw BadRequestError.wrap(
+ 						'Request body stream was aborted mid-read or is not readable',
+@@ -76,6 +74,14 @@
+ 					);
+ 				}
+ 				throw error;
++			} finally {
++				if (decoder) {
++					// Stop trailing compressed input after raw-body removes its listeners.
++					req.unpipe(decoder);
++					decoder.on('error', () => {});
++					decoder.destroy();
++					req.resume();
++				}
+ 			}
+ 			req._body = true;
+ 		}
+@@ -84,7 +90,11 @@
+ 	next();
+ };
+ 
+-export const parseBody = async (req: Request) => {
++export const parseBody = async (req: Request, maxBytes?: number) => {
++	if (maxBytes !== undefined) {
++		requestBodyLimits.set(req, maxBytes);
++		if (req.contentType !== 'application/json') throw new BadRequestError('MCP requires an application/json body');
++	}
+ 	// Skip multipart requests (e.g., file uploads) - these need specialized parsing by multer.
+ 	// Reading the body stream here would consume it, making it unavailable for multer processing.
+ 	if (req.contentType?.startsWith('multipart/')) {
+@@ -93,6 +103,9 @@
+ 
+ 	await req.readRawBody();
+ 	const { rawBody, contentType, encoding } = req;
++	if (maxBytes !== undefined && rawBody?.length > maxBytes) {
++		throw new ContentTooLargeError('MCP request exceeds the 1 MiB body limit');
++	}
+ 	if (rawBody?.length) {
+ 		try {
+ 			if (contentType === 'application/json') {
+@@ -114,8 +127,37 @@
+ 	}
+ };
+ 
+-export const bodyParser: RequestHandler = async (req, _res, next) => {
+-	await parseBody(req);
++export const parseMcpBody = async (req: Request) => {
++	if (req.method !== 'POST') {
++		// Discovery/listen requests have no JSON body, but still keep the decoded byte bound.
++		requestBodyLimits.set(req, MCP_MAX_BODY_BYTES);
++		await req.readRawBody();
++		if (req.rawBody?.length > MCP_MAX_BODY_BYTES) {
++			throw new ContentTooLargeError('MCP request exceeds the 1 MiB body limit');
++		}
++		if (req.rawBody?.length) throw new BadRequestError('MCP messages require POST');
++		return;
++	}
++	await parseBody(req, MCP_MAX_BODY_BYTES);
++	try {
++		assertMcpMessageLimits(req.body);
++	} catch (error) {
++		if (error instanceof RangeError) throw new BadRequestError(error.message);
++		throw error;
++	}
++};
++
++export const bodyParser: RequestHandler = async (req, res, next) => {
++	const isMcp = /\/mcp-server\/http\/?$/.test(req.path);
++	if (isMcp) {
++		try {
++			await parseMcpBody(req);
++		} catch (error) {
++			if (res.headersSent || !(error instanceof Error)) next(error);
++			else sendErrorResponse(res, error);
++			return;
++		}
++	} else await parseBody(req);
+ 	req.body ??= {};
+ 	next();
+ };
+--- a/packages/cli/src/modules/mcp/mcp.controller.ts
++++ b/packages/cli/src/modules/mcp/mcp.controller.ts
+@@ -1,3 +1,4 @@
++import { MCP_MAX_BODY_BYTES } from '@n8n/ai-utilities/mcp-input-limits';
+ import { Logger } from '@n8n/backend-common';
+ import { AuthenticatedRequest } from '@n8n/db';
+ import { createIpRateLimit, Get, Head, Post, RootLevelController } from '@n8n/decorators';
+@@ -246,13 +247,14 @@
+ 			async () => await this.mcpService.getServer(req.user, featureFlags, getClientInfo(req), auth),
+ 			{
+ 				legacy: 'stateless',
++				maxRequestBodySize: MCP_MAX_BODY_BYTES,
+ 				onerror: (error) => {
+ 					reportedError ??= error.message;
+ 					this.errorReporter.error(error);
+ 				},
+ 			},
+ 		);
+-		await toNodeHandler(handler)(req, res, body);
++		await toNodeHandler(handler, { maxRequestBodySize: MCP_MAX_BODY_BYTES })(req, res, body);
+ 
+ 		return reportedError;
+ 	}
+--- a/packages/cli/src/modules/mcp/mcp.service.ts
++++ b/packages/cli/src/modules/mcp/mcp.service.ts
+@@ -1,3 +1,4 @@
++import { MCP_MAX_TOOL_ELEMENTS } from '@n8n/ai-utilities/mcp-input-limits';
+ import type { InputRequiredResult, McpServer } from '@modelcontextprotocol/server';
+ import {
+ 	CREDENTIAL_DESCRIPTIONS_FLAG,
+@@ -531,6 +532,7 @@
+ 				version: agentsEnabled ? '1.2.0' : builderEnabled ? '1.1.0' : '1.0.0',
+ 			},
+ 			{
++				maxToolInputElements: MCP_MAX_TOOL_ELEMENTS,
+ 				instructions: getMcpInstructions({
+ 					isInstanceContextEnabled:
+ 						featureFlags.instanceContextEnabled &&
+--- a/packages/cli/src/webhooks/webhook-helpers.ts
++++ b/packages/cli/src/webhooks/webhook-helpers.ts
+@@ -74,7 +74,7 @@
+ 	UnsupportedMediaTypeError,
+ } from '@n8n/errors';
+ import { createExecutionIdV2, type ExecutionIdV2 } from '@/executions/execution-id';
+-import { parseBody } from '@/middlewares';
++import { parseBody, parseMcpBody } from '@/middlewares';
+ import { WebhookResponseRelay } from '@/scaling/webhook-response-relay';
+ import { EngineV2PayloadFiles } from '@/services/engine-v2-payload-files.service';
+ import { OwnershipService } from '@/services/ownership.service';
+@@ -1730,6 +1730,11 @@
+ 	executionMode: WorkflowExecuteMode,
+ 	additionalKeys: IWorkflowDataProxyAdditionalKeys,
+ ) {
++	if (workflowStartNode.type === MCP_TRIGGER_NODE_TYPE) {
++		await parseMcpBody(req);
++		return undefined;
++	}
++
+ 	let binaryData: string | number | boolean | unknown[] | undefined;
+ 
+ 	const nodeVersion = workflowStartNode.typeVersion;

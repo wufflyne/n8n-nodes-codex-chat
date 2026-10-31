@@ -48,6 +48,7 @@ export class AdmissionRejection extends CodexError {
   }
 }
 export interface TransportContext {
+  outputContract?: import("../kernel/output-contract.js").OutputContract;
   deadline?: number;
   affinity?: string;
   recorder?: CallRecorder;

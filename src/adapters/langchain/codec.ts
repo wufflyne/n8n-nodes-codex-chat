@@ -1,7 +1,8 @@
 import { outputText } from "../../kernel/completion.js";
 import { validator } from "../../kernel/structured.js";
 export { outputText } from "../../kernel/completion.js";
-import { ReplayLedger, validateReplayPart } from "../../core/replay.js";
+import { ReplayLedger, validateReplayPart, validateReplayFull, validateReplayProvenance } from "../../core/replay.js";
+import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { normalizeImage, type ImageBudget } from "../../image/validation.js";
 import { jsonSnapshot } from "../../core/snapshot.js";
@@ -32,10 +33,14 @@ export interface ToolRegistry {
   names: Map<string, string>;
 }
 export interface ReplayMetadata {
-  version: 1;
+  version: 2;
   provider: typeof PROVIDER;
   affinity: string;
   wire: "responses" | "responses-lite";
+  model: string;
+  codec: "responses-v1" | "responses-lite-v1";
+  diagnostic?: "owned-structured-output";
+  boundary?: string;
   items: ResponseItem[];
   prefix?: ResponseItem[];
 }
@@ -159,7 +164,7 @@ export function buildRequest(
   const instructions: string[] = [];
   const calls = new Map<string, { name: string; namespace?: string }>();
   const seen = new Map<string, ResponseItem>();
-  const replayed = new Set<string>();
+  const replayed = new Map<string, { metadata: ReplayMetadata; parts: Set<string>; expected: string[] }>();
   const results = new Set<string>();
   const wire = model.useResponsesLite ? "responses-lite" : "responses";
   const add = (item: ResponseItem, deduplicate = false) => {
@@ -230,18 +235,11 @@ export function buildRequest(
       const saved =
         message.additional_kwargs.codex_response ??
         (replay && ai.tool_calls?.length
-          ? replay.restore(ai, session, wire)
+          ? replay.restore(ai, session, wire, model.slug)
           : undefined);
       if (saved !== undefined) {
-        const metadata = record(saved);
-        assert(
-          metadata.version === 1 &&
-            metadata.provider === PROVIDER &&
-            metadata.affinity === session.affinity &&
-            metadata.wire === wire &&
-            Array.isArray(metadata.items),
-          "History belongs to a different account or wire format. Use a separate memory session for this profile and model route.",
-        );
+        const metadata = record(saved) as unknown as ReplayMetadata;
+        validateReplayProvenance(metadata as unknown as ReplayMetadata, session, model.slug, wire);
         if (message.additional_kwargs.codex_replay_part !== undefined) {
           validateReplayPart(ai, metadata as unknown as ReplayMetadata);
           const group = JSON.stringify(
@@ -249,14 +247,25 @@ export function buildRequest(
               .filter((item: ResponseItem) => item.type === "function_call")
               .map((item: ResponseItem) => item.call_id),
           );
-          if (replayed.has(group)) continue;
-          replayed.add(group);
-        }
+          const previous = replayed.get(group);
+          const entry = previous ?? { metadata: metadata as unknown as ReplayMetadata, parts: new Set<string>(), expected: (metadata.items as ResponseItem[]).filter((item) => item.type === "function_call").map((item) => String(item.call_id)) };
+          assert(!previous || isDeepStrictEqual(previous.metadata, metadata), "Split replay groups contain conflicting copies or prefixes.");
+          for (const call of ai.tool_calls ?? []) {
+            assert(call.id && !entry.parts.has(call.id), "A split replay call appears more than once.");
+            entry.parts.add(call.id);
+          }
+          replayed.set(group, entry);
+          if (previous) continue;
+        } else validateReplayFull(ai, metadata as unknown as ReplayMetadata);
         if (metadata.prefix !== undefined) {
           assert(
             Array.isArray(metadata.prefix),
             "Stored replay history is invalid.",
           );
+          if (metadata.prefix.length) {
+            const boundary = input.findLast((item) => item.type === "message" && item.role === "user");
+            assert(boundary && metadata.boundary === replayBoundary(boundary), "Saved replay prefix crosses the caller's current user boundary. Preserve this memory and start a new session.");
+          }
           for (const item of metadata.prefix)
             add(record(item) as ResponseItem, true);
         }
@@ -303,6 +312,10 @@ export function buildRequest(
         "This message role is unsupported by the Codex provider.",
       );
   }
+  assert(
+    [...replayed.values()].every((group) => group.expected.length === group.parts.size && group.expected.every((id) => group.parts.has(id))),
+    "History omits part of a split provider tool group.",
+  );
   assert(
     [...calls.keys()].every((id) => results.has(id)),
     "History contains an incomplete tool round. Use memory that retains every tool result.",
@@ -377,6 +390,7 @@ export function outputMessage(
   session: Session,
   model: ModelInfo,
   structured = false,
+  diagnostic = false,
 ): AIMessage {
   const toolCalls: ToolCall[] = [];
   const invalidCalls: Array<{
@@ -411,6 +425,10 @@ export function outputMessage(
       name,
       "The provider requested a tool that is not connected to this model.",
     );
+    if (diagnostic) {
+      invalidCalls.push({ id, name, args: typeof item.arguments === "string" ? item.arguments : "", error: "Invalid owned structured output.", type: "invalid_tool_call" });
+      continue;
+    }
     let args: Record<string, unknown>;
     try {
       args = record(
@@ -437,10 +455,13 @@ export function outputMessage(
     toolCalls.push({ id, name, args, type: "tool_call" });
   }
   const metadata: ReplayMetadata = {
-    version: 1,
+    version: 2,
     provider: PROVIDER,
     affinity: session.affinity,
     wire: model.useResponsesLite ? "responses-lite" : "responses",
+    model: model.slug,
+    codec: model.useResponsesLite ? "responses-lite-v1" : "responses-v1",
+    ...(diagnostic ? { diagnostic: "owned-structured-output" as const } : {}),
     items: response.output,
   };
   const usage = normalizeUsage(response.usage);
@@ -449,13 +470,13 @@ export function outputMessage(
     content: outputText(response),
     tool_calls: toolCalls,
     invalid_tool_calls: invalidCalls,
-    additional_kwargs: { codex_response: metadata },
+    additional_kwargs: { codex_response: metadata, ...(diagnostic ? { codex_owned_diagnostics: invalidCalls } : {}) },
     response_metadata: {
       provider: PROVIDER,
       model: model.slug,
       responseId: response.id,
       usage,
-      ...(invalidCalls.length ? { structuredInvalidArguments: true } : {}),
+      ...(invalidCalls.length || diagnostic ? { structuredInvalidArguments: true, ownedStructuredDiagnostic: true } : {}),
       refusal: response.output.some(
         (item) =>
           Array.isArray(item.content) &&
@@ -470,4 +491,9 @@ export function outputMessage(
     },
     usage_metadata: langChainUsage(usage),
   });
+}
+
+export function replayBoundary(item: ResponseItem): string {
+  const canonical = (value: unknown): unknown => Array.isArray(value) ? value.map(canonical) : value && typeof value === "object" ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b)).map(([key, child]) => [key, canonical(child)])) : value;
+  return createHash("sha256").update(JSON.stringify(canonical(item))).digest("hex");
 }

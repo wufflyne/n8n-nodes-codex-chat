@@ -1,6 +1,6 @@
 # Codex Wire gateway and standalone Agents
 
-Version 0.0.5 adds an explicit account owner service. The same Codex subscription profiles can serve native n8n workflows and standalone n8n Agents. Platform API credentials are never used as a fallback. The gateway does not execute tools; n8n remains responsible for tool execution and approvals.
+Version 0.1.0 provides an explicit account owner service with a shared token-ownership journal. The same Codex subscription profiles can serve native n8n workflows and standalone n8n Agents. Platform API credentials are never used as a fallback. The gateway does not execute tools; n8n remains responsible for tool execution and approvals.
 
 The [qualification guide](qualification.md) describes the tested installation and its limits. The included isolated fixture uses synthetic accounts and provider responses. Real entitlement, renewal, model quality and reset effects require separate live verification.
 
@@ -17,7 +17,7 @@ Starting n8n or importing a node never starts an HTTP listener. Run `codex-wire-
 
 ## Deploy the companion
 
-Use Node 26.12.1 and the reviewed 0.0.5 package. Keep the existing 32-byte master key in a protected file outside the profile directory. Gateway profile/envelope v1 stays compatible with existing binding IDs. The gateway database is a separate encrypted SQLite schema and must not be restored over current rotating tokens.
+Use Node 26.12.1 and the reviewed 0.1.0 package. Keep the existing 32-byte master key in a protected file outside the profile directory. Gateway profile/envelope v1 stays compatible with existing binding IDs. The gateway database is a separate encrypted SQLite schema and must not be restored over current rotating tokens.
 
 ```json
 {
@@ -44,7 +44,7 @@ Use Node 26.12.1 and the reviewed 0.0.5 package. Keep the existing 32-byte maste
 
 Configuration and key files must be private regular files; profile/state directories must be private real directories. Terminate TLS at a protected operator-controlled ingress. The administration listener must not be exposed alongside public inference. An explicitly enabled `admin.allowLoopbackHttp` permits a loopback public origin for local testing, including a container internal bind: publish that port only on `127.0.0.1`, never a LAN/public address. Host/Origin, session and CSRF checks still apply. Do not publish private inference without authentication and transport protection.
 
-`Dockerfile.gateway` assembles previously compiled runtime output. The reproducible matched n8n build requires the source checkout with `integration/scripts`, `integration/consumer` and `integration/n8n-2.45.6`. Build/test orchestration and synthetic fixtures are not shipped as npm operator commands. The npm artifact carries the reviewed patch and exact-source overlay compiler; building requires the pinned TypeScript 5.9.3 development dependency. Its dependency build uses explicit CPU/memory limits; final image assembly uses no network. The lifecycle runtime is neutral and loads without installing community nodes. A community installation remains separate and must use host LangChain/n8n-workflow identities; do not install private copies or symlink peers into the community root.
+`Dockerfile.gateway` assembles previously compiled runtime output. The reproducible matched n8n build requires the source checkout with `integration/scripts`, `integration/consumer` and `integration/n8n-2.45.6`. Build/test orchestration and synthetic fixtures are not shipped as npm operator commands. The npm artifact carries the lifecycle and security patch inputs and their compilers. Complete build orchestration, consumer fixtures, Docker recipes and synthetic qualification tools require the source checkout; the npm package alone is not a complete companion build kit. Building requires the pinned TypeScript 5.9.3 development dependency. Its dependency build uses explicit CPU/memory limits; final image assembly uses no network. The lifecycle runtime is neutral and loads without installing community nodes. A community installation remains separate and must use host LangChain/n8n-workflow identities; do not install private copies or symlink peers into the community root.
 
 ### Reproducible companion assembly
 
@@ -56,19 +56,25 @@ npm ci --prefix integration/consumer --ignore-scripts --no-audit --no-fund
 CODEX_WIRE_SDK_ROOT="$PWD/integration/consumer/node_modules" npm run check
 mkdir -p artifacts
 npm pack --ignore-scripts --pack-destination artifacts
-BUILD_CONTEXT="$PWD/gateway-build-0.0.5"
+BUILD_CONTEXT="$PWD/gateway-build-0.1.0"
 mkdir "$BUILD_CONTEXT"
 mkdir "$BUILD_CONTEXT/runtime"
-tar -xzf artifacts/n8n-nodes-codex-chat-0.0.5.tgz \
+tar -xzf artifacts/n8n-nodes-codex-chat-0.1.0.tgz \
   -C "$BUILD_CONTEXT/runtime" --strip-components=1
 cp package-lock.json "$BUILD_CONTEXT/runtime/"
 npm ci --prefix "$BUILD_CONTEXT/runtime" --omit=dev --omit=peer \
   --ignore-scripts --no-audit --no-fund
 docker build --network=none -f Dockerfile.gateway \
-  -t codex-wire-gateway:0.0.5 "$BUILD_CONTEXT"
+  -t codex-wire-gateway:0.1.0 "$BUILD_CONTEXT"
 ```
 
-Use a fresh build directory and retain earlier artifacts for rollback. Source/dependency preparation is the expensive step; `integration/scripts/bounded-build.sh` provides an explicitly CPU/memory-bounded container alternative for the full source qualification build. Final image assembly installs no packages.
+Use a fresh build directory and retain earlier artifacts for rollback. Source/dependency preparation is the expensive step; `integration/scripts/bounded-build.sh` provides an explicitly CPU/memory-bounded container alternative for the full source qualification build. Final image assembly has no network access. Its pinned offline APK step replaces exactly three verified OS libraries without scripts, and its JavaScript step installs the already prepared security tree.
+
+For the matched n8n companion, first obtain the exact n8n `n8n@2.45.6` source archive and verify SHA256 `897f9cc8b004d2bd15aeb37a4ce053ba45f2d7a7810a30203ea1bf8226d6822d`. Apply `integration/n8n-2.45.6/model-request-context.patch` and then `integration/security/n8n-security.patch` to an isolated copy. Both compilers verify their per-file manifests. Set absolute `CANDIDATE_ROOT`, `UPSTREAM_ROOT` and `QUALIFICATION_ROOT`, plus an operator-selected `BUILD_RESOURCE_PREFIX` and fresh `BUILD_CHECKPOINT`, then run `integration/scripts/bounded-build.sh`. Review its exact mounts/resource/network scope before using Docker. It prepares the tarball, lifecycle output, locked security tree and signed offline OS inputs. Keep the full output directory and build receipts together.
+
+The generated `n8n.Dockerfile` and `gateway.Dockerfile` assemble from that output with `docker build --network=none`; the fixture Dockerfile is synthetic qualification only. The n8n companion includes the lifecycle and security overlays and initially loads no Codex nodes: its custom-extension path is empty. Install the tarball separately through the community loader for native nodes, retaining the npm namespace and actual community helper path. Record the recipe, variant and immutable image ID in the release receipt. Never substitute the lifecycle patch alone for the complete matched security layer. See [security scope](security.md).
+
+The root `Dockerfile.n8n` and `release:local` command produce a separate legacy CUSTOM embedded image. That route requires `CODEX_RELEASE_SECURITY_BUNDLE` pointing at the bounded output's `security` directory and verifies it before building, but does not install the standalone Agents lifecycle overlay. Its `/opt/n8n-codex` helper location and CUSTOM workflow namespace do not apply to community installation on the companion. The conventional `codex-wire-n8n:0.1.0` tag must always be interpreted with its exact release receipt; do not replace one variant with the other under an existing tag.
 
 Set `N8N_PRIVATE_NETWORK` to an existing private Docker network already attached to n8n, then adapt `compose.gateway.example.yaml` and private configuration. The template does not publish inference on the host. n8n reaches `http://codex-wire-gateway:8787` through that shared network; explicitly enable private HTTP for this deployment. Administration alone is published to host loopback in the example. A supervised local CLI deployment is separate: bind inference to loopback and run the client on that same host, or supply protected remote transport. Container loopback is not host loopback.
 
@@ -126,7 +132,7 @@ For the recommended combined native and Agents setup, use that same actual n8n I
 
 The server derives project/agent revision/conversation/branch/run/turn identity from accepted execution state, persists an operation before send, and reuses it across SDK retries and checkpoint resume. Attempt timestamps are separate. An authenticated artifact handshake activates a pending pool connection; setting a configuration boolean alone is insufficient. No static custom header or inference key can impersonate this integration. Context secrets are attached only to exact allowlisted Responses endpoints; redirects fail closed and internal headers are stripped before provider transport.
 
-A new branch considers its ordered profiles; synthetic qualification covers 32 accounts. Known exact-model or capability mismatches are skipped before inference; authentication or catalog failures stop the request. Duplicate profiles for one verified account share admission limits and are not retried as separate quota candidates. Only a fresh applicable quota denial before HTTP admission permits another account. Any successful admission pins the account through text, tools, helpers and later turns. Removing an account from new candidates does not repin existing branches. Disable a connection to stop its existing branches. Deleted/expired/cross-account history cannot silently restart a branch elsewhere. Physical profile deletion is not provided; deliberate store maintenance must stop and fence owners and preserve unresolved pins/journals.
+A new branch considers up to 32 ordered profiles. The console preserves the relative order of already selected profiles and appends new selections; its visible priority matches the effective pool order. Known exact-model or capability mismatches are skipped before inference; authentication or catalog failures stop the request. Duplicate profiles for one verified account share admission limits and are not retried as separate quota candidates. Only a fresh applicable quota denial before HTTP admission permits another account. Any successful admission pins the account through text, tools, helpers and later turns. Removing an account from new candidates does not repin existing branches. Disable a connection to stop its existing branches. Deleted/expired/cross-account history cannot silently restart a branch elsewhere. Physical profile deletion is not provided; deliberate store maintenance must stop and fence owners and preserve unresolved pins/journals.
 
 ## Retention and bounded behavior
 
@@ -153,15 +159,15 @@ codex-wire-gateway transfer-store --config /protected/current.json \
   --target-directory /private/new-owner-profiles --owners-stopped-and-fenced
 ```
 
-The target must be new. Transfer verifies independent encrypted copies, current tokens, binding hashes, import/reset uncertainty journals and lock directories. It neither refreshes nor restores stale secrets. Remove old owner's store/key access before starting the new owner. Shutdown stops new admissions and joins device activation, asynchronous request handlers and persistence cleanup before releasing ownership. The Compose templates allow 120 seconds before Docker sends SIGKILL. The application gives active handlers and device work 60 seconds to settle; a shared OAuth refresh has a 30-second transport deadline and its durable commit must also finish. The extra grace covers healthy commit latency, not indefinitely stalled storage. A bounded drain failure preserves the owner fence. A hard-killed process leaves an owner fence; investigate and stop every possible writer before deliberate offline recovery. Never remove a fence merely because it is old.
+The target must be new. Transfer verifies independent encrypted copies, current tokens, binding hashes, the permanent format guard, token journal/initialization marker/captures, and import/reset uncertainty fences. It excludes only the active v0.1.0 owner lock. It neither refreshes nor restores stale secrets. Remove old owner's store/key access before starting the new owner. Shutdown stops new admissions and joins device activation, asynchronous request handlers and persistence cleanup before releasing ownership. The Compose templates allow 120 seconds before Docker sends SIGKILL. The application gives active handlers and device work 60 seconds to settle; a shared OAuth refresh has a 30-second transport deadline and its durable commit must also finish. The extra grace covers healthy commit latency, not indefinitely stalled storage. A bounded drain failure preserves the owner fence. A hard-killed process leaves an owner fence; investigate and stop every possible writer before deliberate offline recovery. Never remove a fence merely because it is old.
 
-For rollback keep the latest token generation and journals. Returning to embedded mode ends gateway-only continuity: disable/drain/stop the gateway, transfer the current v1 store, restore the old code, then grant that process exclusive access. Retain the gateway database for audit and future compatible restart. Unknown refresh requires identity-preserving reconnect; unknown reset requires the existing reconciliation path. Never restore a stale token backup to undo a refresh or reset.
+For rollback keep the latest token generation and journals and use only code that understands the v0.1.0 safety format. The permanent old-owner guard makes the verified v0.0.5 owner refuse the store after clean shutdown too. Earlier/custom clients that ignore owner locks must have their key/store access revoked operationally. Returning to embedded mode requires disable/drain/stop, current-store transfer and a compatible embedded package; it ends gateway-only continuity. Retain the gateway database for audit and future compatible restart. Captured verified success can be promoted locally; a lost or unverified response never authorizes another renewal. Unknown reset requires the existing reconciliation path. Never restore a stale token snapshot or remove a guard to undo renewal/reset history.
 
 Optional Assistant/AI-assisted building is unqualified and has no Chat endpoint in this release. Token savings, quality equivalence, future model protocols and live account entitlement are not inferred from synthetic tests.
 
 ### Matched lifecycle coverage
 
-Accepted standalone turns and saved workflow-Agent executions supply durable host admission time. Delegated/background children capture parent provenance before dispatch and restore it from checkpoints. Inline workflow-Agent entrypoints read the original persisted n8n execution start time using the trusted execution ID. Missing execution records or admission timestamps fail closed for attested gateway calls; ordinary other-provider flows remain unaffected. Synthetic exact-image tests exercise this path against the real execution database. Stock n8n 2.45.6 has no user fork/regenerate endpoint in this Agents implementation. Independent branches are isolated; copying another branch's opaque history handles is rejected. This release does not add a fork UI or promise cross-branch history cloning.
+Accepted standalone turns and saved workflow-Agent executions supply durable host admission time. Delegated/background children capture parent provenance before dispatch and restore it from checkpoints. Inline workflow-Agent entrypoints read the original persisted n8n execution start time using the trusted execution ID. Missing execution records or admission timestamps fail closed for attested gateway calls; ordinary other-provider flows remain unaffected. Installed qualification exercises this path against the real execution database with controlled providers. Stock n8n 2.45.6 has no user fork/regenerate endpoint in this Agents implementation. Independent branches are isolated; copying another branch's opaque history handles is rejected. This release does not add a fork UI or promise cross-branch history cloning.
 
 The protected control registry is bounded to 256 issued key records. Revoked records remain auditable and cannot be reactivated by acknowledging an earlier delivery. Reaching the bound requires deliberate operator migration rather than silent deletion of old security records.
 

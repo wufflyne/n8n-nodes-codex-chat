@@ -12,7 +12,8 @@ import type { Binding, ProviderTool } from "../core/types.js";
 import { accountIdentityKey, type ExecutionContext } from "../core/affinity.js";
 import type { CodexService, NativeGeneration } from "./contracts.js";
 import type { runtimeFromEnvironment } from "../runtime.js";
-import { validateNativeRequest } from "../kernel/request.js";
+import { validateNativeRequest, validateNativeShape } from "../kernel/request.js";
+import { validateOutputContract } from "../kernel/output-contract.js";
 
 export class EmbeddedService implements CodexService {
   constructor(readonly resources: ReturnType<typeof runtimeFromEnvironment>) {}
@@ -67,6 +68,7 @@ export class EmbeddedService implements CodexService {
     signal?: AbortSignal,
     onAdmission?: () => void | Promise<void>,
   ) {
+    validateNativeShape(input.request, input.settings, input.lite);
     const r = this.resources,
       session = await r.sessions.session(binding, signal),
       model = await r.catalog.model(session, input.request.model, signal);
@@ -78,6 +80,9 @@ export class EmbeddedService implements CodexService {
     );
     validateSettings(model, input.settings);
     validateNativeRequest(input.request, input.settings, model);
+    const additional = input.request.input.find((i) => i.type === "additional_tools");
+    const tools = input.request.tools ?? (additional?.tools as Array<{ tools: ProviderTool[] }> | undefined)?.[0]?.tools ?? [];
+    const outputContract = validateOutputContract(input.outputContract, tools, input.request.text?.format);
     assert(
       input.request.prompt_cache_key === input.affinity,
       "Native affinity metadata does not match the request.",
@@ -144,7 +149,7 @@ export class EmbeddedService implements CodexService {
                 4 * 1024 * 1024,
             "Native gateway output exceeded its terminal bound.",
           );
-          validateCompletion(event.response, tools, text);
+          validateCompletion(event.response, tools, text, outputContract);
           recorder.complete(normalizeUsage(event.response.usage));
         }
         yield event;

@@ -11,7 +11,7 @@ import {
   type Session,
   type TokenSet,
 } from "../core/types.js";
-import type { AuthProvider, VerifiedTokens } from "./provider.js";
+import { tokenResponse, type AuthProvider } from "./provider.js";
 import { verifyDelivery, type DurableBinding } from "./connection.js";
 import { ProfileStore, bindingHash } from "./store.js";
 
@@ -22,6 +22,12 @@ function sameIdentity(a: Identity, b: Identity): boolean {
     a.accountId === b.accountId &&
     a.clientId === b.clientId
   );
+}
+
+function unchangedMaterial(received: TokenSet, verified: TokenSet): void {
+  assert(["accessToken", "refreshToken", "idToken"].every(
+    (name) => received[name as keyof TokenSet] === verified[name as keyof TokenSet]),
+    "Verification changed captured token material. Preserve the successful response and recover it offline.");
 }
 
 export interface PreparedNewProfile {
@@ -118,15 +124,18 @@ export class AccountSessionManager {
     // Snapshot before awaiting identity keys; callers cannot alter a validated candidate later.
     const snapshot = structuredClone(tokens);
     const binding = { ...selectedBinding };
+    await this.store.rotation.initialize();
     const observed = existing ? await this.store.read(ownerAccess ?? binding) : undefined;
     const candidate = await waitForSignal(
-      this.auth.verify(snapshot, Boolean(snapshot.refreshToken)),
+      this.auth.verify(structuredClone(snapshot), Boolean(snapshot.refreshToken)),
       signal,
     );
+    unchangedMaterial(snapshot, candidate.tokens);
     throwIfAborted(signal);
     const verifiedCandidate = structuredClone(candidate);
     await this.store.locked(binding.profileId, async () => {
       throwIfAborted(signal);
+      if (existing) await this.store.rotation.recoverCommitted(binding.profileId);
       if (!existing)
         assert(
           !(await this.store.exists(binding.profileId)),
@@ -151,26 +160,13 @@ export class AccountSessionManager {
         "This rotating token has an uncertain or revoked outcome. Reconnect using a fresh device login or independent token set.",
       );
       throwIfAborted(signal);
-      // Commit starts at the next profile/bootstrap-intent write. Complete it despite later caller cancellation.
-      let verified = verifiedCandidate;
+      // Ownership is durable before activation, including initially unexpired imports.
+      const verified = verifiedCandidate;
       if (verified.tokens.expiresAt <= Date.now()) {
-        assert(
-          this.refreshEnabled && verified.tokens.refreshToken,
-          "The imported access token has expired and automatic renewal is unavailable.",
-        );
-        assert(
-          (verified.tokens.earliestRefreshAt ?? 0) <= Date.now(),
-          "Token renewal is not permitted yet. Wait until the allowed refresh time.",
-        );
-        // Preserve a working profile; a separate durable claim prevents this bootstrap token being reused.
-        await this.store.claimImportRenewal(verified.tokens.refreshToken);
-        if (previous?.tokens.refreshToken === verified.tokens.refreshToken)
-          await this.store.write({ ...previous, state: "refresh_uncertain" });
-        verified = await this.auth.verify(await this.auth.refresh(verified.tokens));
-        assert(
-          sameIdentity(verifiedCandidate.identity, verified.identity),
-          "Token renewal returned a different account. The profile was not replaced.",
-        );
+        assert(this.refreshEnabled && verified.tokens.refreshToken,
+          "The imported access token has expired and automatic renewal is unavailable.");
+        assert((verified.tokens.earliestRefreshAt ?? 0) <= Date.now(),
+          "Token renewal is not permitted yet. Wait until the allowed refresh time.");
       }
       const profile: Profile = {
         ...verified.identity,
@@ -185,20 +181,31 @@ export class AccountSessionManager {
         verifiedAt: Date.now(),
         ...(verified.display ? { display: verified.display } : {}),
       };
-      await this.store.write(profile);
+      if (profile.tokens.expiresAt <= Date.now()) {
+        const operation = await this.store.rotation.beginBootstrap(profile, previous);
+        await this.completeRotation(profile, operation, profile.generation,
+          previous?.tokens.refreshToken === profile.tokens.refreshToken ? previous : undefined);
+      } else await this.store.rotation.register(profile, previous);
     });
     return binding;
   }
 
   async session(binding: ProfileBinding, signal?: AbortSignal): Promise<Session> {
     throwIfAborted(signal);
+    await this.store.rotation.initialize();
     let profile = await this.store.read(binding);
+    // Another owner may replace this generation while we wait. Do not rotate
+    // its replacement again merely because it has a short access-token lifetime.
+    const observedGeneration = profile.generation;
     throwIfAborted(signal);
     const active = this.flights.get(profile.id);
     if (active) profile = await waitForSignal(active, signal);
     else if (profile.state === "refresh_uncertain")
       profile = await waitForSignal(
-        this.store.locked(profile.id, () => this.store.read(binding)),
+        this.store.locked(profile.id, async () => {
+          await this.store.rotation.recoverCommitted(profile.id);
+          return this.store.read(binding);
+        }),
         signal,
       );
     if (profile.state !== "ready")
@@ -208,6 +215,15 @@ export class AccountSessionManager {
           ? "The previous token renewal did not finish safely. Reconnect this profile; stored credentials were preserved."
           : "Reconnect this account profile before continuing.",
       );
+    try { await this.store.rotation.assertReady(profile); }
+    catch {
+      profile = await this.store.locked(profile.id, async () => {
+        await this.store.rotation.recoverCommitted(profile.id);
+        return this.store.read(binding);
+      });
+      await this.store.rotation.assertReady(profile);
+      if (profile.state !== "ready") throw new CodexError("reconnect", "The profile requires offline recovery or an independent login.");
+    }
     const expiresSoon = profile.tokens.expiresAt <= Date.now() + 30000;
     if (
       expiresSoon &&
@@ -217,7 +233,7 @@ export class AccountSessionManager {
     ) {
       let flight = this.flights.get(profile.id);
       if (!flight) {
-        flight = this.renew(binding, profile.generation);
+        flight = this.renew(binding, observedGeneration);
         this.flights.set(profile.id, flight);
         void flight.finally(() => this.flights.delete(profile.id)).catch(() => undefined);
       }
@@ -235,7 +251,9 @@ export class AccountSessionManager {
 
   async currentSession(binding: ProfileBinding, signal?: AbortSignal): Promise<Session> {
     throwIfAborted(signal);
+    await this.store.rotation.initialize();
     const profile = await this.store.read(binding);
+    await this.store.rotation.assertReady(profile);
     throwIfAborted(signal);
     if (profile.state !== "ready" || profile.tokens.expiresAt <= Date.now())
       throw new CodexError(
@@ -265,6 +283,7 @@ export class AccountSessionManager {
 
   private async renew(binding: ProfileBinding, observedGeneration: number): Promise<Profile> {
     return this.store.locked(binding.profileId, async () => {
+      await this.store.rotation.recoverCommitted(binding.profileId);
       const current = await this.store.read(binding);
       if (current.state !== "ready")
         throw new CodexError("reconnect", "The profile requires reconnection before renewal.");
@@ -278,34 +297,76 @@ export class AccountSessionManager {
         (current.tokens.earliestRefreshAt ?? 0) <= Date.now(),
         "Token renewal is not permitted yet.",
       );
-      // Persist an intent before using a rotating secret. A crash or ambiguous write cannot reuse it silently.
-      await this.store.write({ ...current, state: "refresh_uncertain" });
-      let fresh: VerifiedTokens;
-      try {
-        const renewed = await this.auth.refresh(current.tokens);
-        fresh = await this.auth.verify(renewed);
-        assert(
-          sameIdentity(current, fresh.identity),
-          "Token renewal returned a different account. Reconnect this profile.",
-        );
-      } catch (error) {
-        const permanent = error instanceof CodexError && error.category === "reconnect";
-        // Preserve tokens for recovery. Unknown outcomes deliberately remain fenced against replay.
-        if (permanent) await this.store.write({ ...current, state: "reconnect" });
-        throw error;
-      }
-      const replacement: Profile = {
-        ...current,
-        tokens: fresh.tokens,
-        generation: current.generation + 1,
-        state: "ready",
-        verifiedAt: Date.now(),
-        display: fresh.display,
-      };
-      await this.store.write(replacement);
-      return replacement;
+      return this.rotate(current);
     });
   }
+
+  private async rotate(current: Profile): Promise<Profile> {
+    const operation = await this.store.rotation.begin(current);
+    return this.completeRotation(current, operation, current.generation + 1, current);
+  }
+
+  private async completeRotation(current: Profile, operation: string, generation: number, failureProfile?: Profile): Promise<Profile> {
+    try {
+      const renewed = await this.auth.refresh(structuredClone(current.tokens), async (bytes) => {
+        await this.store.rotation.capture(operation, { kind: "http", bytes: bytes.toString("base64") });
+      });
+      // Custom providers may not implement raw HTTP capture. Preserve their returned bundle before verification.
+      if (!await this.store.rotation.captured(operation))
+        await this.store.rotation.capture(operation, { kind: "tokens", tokens: structuredClone(renewed) });
+      const received = { ...renewed,
+        refreshToken: renewed.refreshToken ?? current.tokens.refreshToken,
+        idToken: renewed.idToken ?? current.tokens.idToken };
+      const fresh = await this.auth.verify(structuredClone(received));
+      unchangedMaterial(received, fresh.tokens);
+      assert(sameIdentity(current, fresh.identity), "Token renewal returned a different account. Preserve the captured response and reconnect this profile.");
+      const replacement: Profile = { ...current, tokens: fresh.tokens, generation,
+        state: "ready", verifiedAt: Date.now(), display: fresh.display };
+      await this.store.rotation.verifyReceipt(operation, replacement);
+      return await this.store.rotation.promote(operation);
+    } catch (error) {
+      // A received response remains encrypted even when parsing, verification or promotion fails.
+      // No error path reauthorizes the dispatched epoch.
+      if (failureProfile && error instanceof CodexError && error.category === "reconnect")
+        await this.store.write({ ...failureProfile, state: "reconnect" });
+      throw error;
+    }
+  }
+
+  /** Deliberate offline recovery verifies captured material, never calls the refresh endpoint. */
+  async recover(binding: ProfileBinding): Promise<void> {
+    await this.store.rotation.initialize();
+    await this.store.locked(binding.profileId, async () => {
+      if (await this.store.exists(binding.profileId)) await this.store.read(binding);
+      else {
+        const candidate = await this.store.rotation.recoveryBindingProfile(binding.profileId);
+        assert(isProfileAccess(binding) || bindingHash(binding.bindingSecret) === candidate.bindingHash, "The recovery binding is invalid.");
+      }
+      await this.store.rotation.recoverCommitted(binding.profileId);
+      const profile = await this.store.exists(binding.profileId) ? await this.store.read(binding) : undefined;
+      if (profile?.state === "ready" && !await this.store.rotation.hasReceipt(binding.profileId)) {
+        await this.store.rotation.assertReady(profile); return;
+      }
+      const receipt = await this.store.rotation.recoveryReceipt(binding.profileId);
+      let tokens: TokenSet;
+      if (receipt.capture!.kind === "http") {
+        let parsed: unknown;
+        try { parsed = JSON.parse(Buffer.from(receipt.capture!.bytes, "base64").toString("utf8")); }
+        catch { throw new CodexError("protocol", "The captured successful response is malformed and cannot be promoted. Preserve it and use an independent login."); }
+        tokens = tokenResponse(parsed, receipt.before.tokens);
+      } else tokens = receipt.capture!.tokens;
+      const received = { ...tokens,
+        refreshToken: tokens.refreshToken ?? receipt.before.tokens.refreshToken,
+        idToken: tokens.idToken ?? receipt.before.tokens.idToken };
+      const verified = await this.auth.verify(structuredClone(received));
+      unchangedMaterial(received, verified.tokens);
+      assert(sameIdentity(receipt.before, verified.identity), "The captured renewal belongs to a different identity and cannot be promoted.");
+      await this.store.rotation.verifyReceipt(receipt.id, { ...receipt.before, tokens: verified.tokens,
+        generation: receipt.before.generation + (receipt.bootstrap ? 0 : 1), state: "ready", verifiedAt: Date.now(), display: verified.display });
+      await this.store.rotation.promote(receipt.id);
+    });
+  }
+
 }
 
 /** Import is explicit; no home directory discovery and no source-file mutation. */

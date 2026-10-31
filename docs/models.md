@@ -16,6 +16,8 @@ Use native n8n tools with the AI Agent. Tool names, schema snapshots, provider I
 
 Native output parsers remain n8n-owned. A parser configured to repair output may invoke the model again. For direct library use, `withStructuredOutput` supports automatic `functionCalling` and explicit `jsonSchema` with local Ajv/Zod validation. `includeRaw` returns JavaScript `{raw, parsed}`; a parse failure yields `parsed: null` without an adapter repair generation.
 
+In the pinned n8n Agent V3, Code Tool can receive host-added call metadata such as `toolCallId`. A manual schema with `additionalProperties: false` can therefore reject that tool input even when the enclosing Agent finishes. Declare the metadata your tool accepts, or allow additional properties when that matches the tool's contract, and check the actual tool result. Codex Wire does not alter a user schema to bypass this validation.
+
 ## Photo inputs
 
 Image input requires explicitly advertised image modality. Canonical LangChain image forms and supported native n8n binary attachments are accepted. Supported raster signatures, byte sizes, image count/detail and HTTPS URL boundaries are validated. n8n loads binary attachments; the adapter does not open host image paths or fetch image URLs itself.
@@ -25,6 +27,8 @@ Direct PDF/files/audio/video, embeddings, realtime/background threads and hosted
 ## Memory and account choice
 
 For a conversation with memory, select an account **before** the Agent using Get Limits → native Model Selector. Include the selected account alias in the Simple Memory session key. This is preselection; quota may change between the read and inference.
+
+Memory nodes determine which message metadata survives. Stock Agent V3 reconstructs split tool-call messages with blank visible text; Codex Wire restores their original provider group once, including its text, phase and retained opaque reasoning. Matching nonempty split text also remains valid after serialization; conflicting text is rejected. Stock Simple Memory constructs the final assistant message from its visible string and does not retain that final message's provider metadata. Codex Wire preserves eligible metadata that actually survives; it does not invent missing final reasoning or restore history outside the supplied memory window.
 
 The **Codex Account Router** supports 2–5 ordered accounts with the same explicit model and semantic settings for one fresh Agent invocation. It rejects attached memory, native Agent Fallback, prior AI/tool history, overlapping calls and a second root invocation in the same execution. Declare its exact consumer Agent name. Public APIs cannot certify the absence of another undeclared consumer; use one input item or a distinct sub-workflow execution per invocation.
 

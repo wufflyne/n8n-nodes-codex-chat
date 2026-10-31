@@ -7,7 +7,7 @@ import type { Session } from "../core/types.js";
 import { count } from "../core/usage.js";
 import { AccountReader, USAGE_BASE } from "./usage.js";
 import { ResetStore, actorFingerprint, type ResetIntent } from "./reset-store.js";
-import { resetEligibility, validateRecovery } from "./reset-policy.js";
+import { resetEligibility, validateResetOptions, validateReconcileOptions } from "./reset-policy.js";
 import type { AccountSnapshot, RecoveryPolicy, ResetResult, ResetOutcome } from "./types.js";
 export class ResetController {
   constructor(
@@ -29,21 +29,7 @@ export class ResetController {
       signal?: AbortSignal;
     },
   ): Promise<ResetResult> {
-    validateRecovery(options.policy);
-    assert(
-      options.origin !== "manual" || options.acknowledgement === true,
-      "Allow this step to use one earned reset credit before executing it.",
-    );
-    assert(
-      options.origin !== "manual" ||
-        (typeof options.selectedCreditId === "string" &&
-          /^[^\x00-\x20\x7f]{1,256}$/.test(options.selectedCreditId)),
-      "Select one eligible reset allocation before executing this manual action.",
-    );
-    assert(
-      /^[a-f0-9]{64}$/.test(options.executionKey),
-      "A public workflow execution identity is required for reset coordination.",
-    );
+    options = validateResetOptions(options, true);
     const session = await this.reader.session(binding, "managed", options.signal);
     assert(session.identity, "Verified account identity is required to use an earned reset.");
     const scope = this.store.scope(session.identity),
@@ -251,10 +237,7 @@ export class ResetController {
     binding: Binding,
     options: { executionKey: string; signal?: AbortSignal },
   ): Promise<ResetResult> {
-    assert(
-      /^[a-f0-9]{64}$/.test(options.executionKey),
-      "A public workflow execution identity is required for reset reconciliation.",
-    );
+    options = validateReconcileOptions(options, true);
     const session = await this.reader.session(binding, "managed", options.signal);
     assert(session.identity, "Verified account identity is required to resolve a reset.");
     const scope = this.store.scope(session.identity),
@@ -301,7 +284,7 @@ export class ResetController {
         return;
       }
       assert(
-        !observed || observed.redeemRequestId === intent.redeemRequestId,
+        observed && observed.redeemRequestId === intent.redeemRequestId,
         "The pending reset changed before reconciliation. Start a new execution.",
       );
       assert(intent.actor === actor, "Pending reset belongs to a different authenticated actor.");
@@ -317,6 +300,10 @@ export class ResetController {
         await this.store.writeLedger(ledger);
         return;
       }
+      assert(
+        currentExecutionReserved,
+        "The pending reset changed before reconciliation. Start a new execution.",
+      );
       if (intent.attemptExecutions?.includes(options.executionKey)) {
         result.action.reason = "cooldown";
         return;

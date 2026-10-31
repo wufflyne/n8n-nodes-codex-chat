@@ -22,6 +22,7 @@ import {
   buildRequest,
   outputMessage,
   toolRegistry,
+  replayBoundary,
 } from "./core/codec.js";
 import { approximateTextTokens } from "./core/token-estimate.js";
 import {
@@ -33,6 +34,7 @@ import {
 import { recordInvocation, type CallRecorder } from "./core/execution-usage.js";
 import { normalizeUsage } from "./core/usage.js";
 import { validateCompletion } from "./kernel/completion.js";
+import { validateOutputContract, type OutputContract } from "./kernel/output-contract.js";
 import {
   structuredRunnable,
   validatedOutputFormat,
@@ -56,7 +58,7 @@ export interface CodexCallOptions extends BaseChatModelCallOptions {
   abortSignal?: AbortSignal;
   codexOutputFormat?: StructuredFormat;
   /** Owned structured parser path; invalid calls are raw diagnostics and never executed. */
-  codexStructuredOutput?: boolean;
+  codexOutputContract?: OutputContract;
 }
 
 export interface CodexModelOptions {
@@ -134,7 +136,8 @@ function prepareRequest(
     Buffer.byteLength(JSON.stringify(request)) <= 32 * 1024 * 1024,
     "The conversation exceeds the 32 MiB request limit.",
   );
-  return { registry, request, affinity };
+  const outputContract = validateOutputContract(options.codexOutputContract, registry.tools, request.text?.format);
+  return { registry, request, affinity, outputContract };
 }
 
 /** One generation per call. n8n owns the agent loop, tool execution and memory. */
@@ -329,7 +332,7 @@ export class CodexChatModel extends BaseChatModel<CodexCallOptions> {
         scope.signal,
       );
       const account = this.#config.account;
-      const { registry, request, affinity } = prepareRequest(
+      const { registry, request, affinity, outputContract } = prepareRequest(
         messages,
         model,
         settings,
@@ -373,6 +376,7 @@ export class CodexChatModel extends BaseChatModel<CodexCallOptions> {
         deadline,
         affinity,
         recorder,
+        outputContract,
       };
       if (account?.policy.automatic && !transportContext.onRejection)
         transportContext.onRejection = async (_r, signal) => {
@@ -448,14 +452,14 @@ export class CodexChatModel extends BaseChatModel<CodexCallOptions> {
           yield chunk;
           await runManager?.handleLLMNewToken(event.text);
         } else {
-          if (!options.codexStructuredOutput)
-            validateCompletion(event.response, registry.tools, streamedText);
+          const diagnostic = validateCompletion(event.response, registry.tools, streamedText, outputContract) === "owned-diagnostic";
           const message = outputMessage(
             event.response,
             registry,
             session,
             model,
-            options.codexStructuredOutput === true,
+            outputContract.kind !== "tools",
+            diagnostic,
           );
           if (this.#config.replay) {
             const metadata = message.additional_kwargs
@@ -464,6 +468,7 @@ export class CodexChatModel extends BaseChatModel<CodexCallOptions> {
             const currentUser = request.input.findLastIndex(
               (item) => item.type === "message" && item.role === "user",
             );
+            if (currentUser >= 0) metadata.boundary = replayBoundary(request.input[currentUser]!);
             metadata.prefix = request.input
               .slice(currentUser + 1)
               .filter(
@@ -503,11 +508,6 @@ export class CodexChatModel extends BaseChatModel<CodexCallOptions> {
                   id: call.id,
                   name: call.name,
                   args: JSON.stringify(call.args),
-                })),
-                ...(message.invalid_tool_calls ?? []).map((call) => ({
-                  id: call.id,
-                  name: call.name,
-                  args: call.args,
                 })),
               ].map((call, index) => ({
                 ...call,

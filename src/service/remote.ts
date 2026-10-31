@@ -49,12 +49,12 @@ export class RemoteService implements CodexService {
       if (
         !response.ok ||
         value.protocolVersion !== 1 ||
-        value.release !== "0.0.5" ||
+        value.release !== "0.1.0" ||
         value.schemaVersion !== 1
       )
         throw new CodexError(
           "configuration",
-          "Gateway and community package versions are incompatible. Install the matched 0.0.5 pair.",
+          "Gateway and community package versions are incompatible. Install the matched 0.1.0 pair.",
         );
     })();
     try {

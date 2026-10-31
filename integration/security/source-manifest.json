@@ -1,0 +1,38 @@
+{
+  "packages/@n8n/ai-utilities/package.json": {
+    "before": "362b95b99f273d538128e905bbb64f15fbcf1bc087b8f7d09097cd55225defc2",
+    "after": "6988a12e8a64442549418bf9259d42869647b3ddb7851cb1c2b20f2294ac2a20"
+  },
+  "packages/@n8n/ai-utilities/src/utils/mcp-input-limits.ts": {
+    "before": null,
+    "after": "b6cee07264683527a2855908ca8130ae67b8f8c63a34fc209757ccf5ea3715c0"
+  },
+  "packages/@n8n/mcp-browser/src/server.ts": {
+    "before": "6dea6dc62328e1f63c81a5761896df4d041f5b585391bc577f3a4de630f8da19",
+    "after": "ca6e061872fa7bcb528266d68b0cf22f9318363b98816c75a3403d5593a46982"
+  },
+  "packages/@n8n/nodes-langchain/nodes/mcp/McpTrigger/McpServer.ts": {
+    "before": "7d3b001b3bc4e28cb70346123ad9d19e6813efd52df5259020d9995681f11739",
+    "after": "ce9e9a9e9936e415c5622c7496e2ca78310d6457dca895344a66cb40fefb9756"
+  },
+  "packages/@n8n/nodes-langchain/nodes/mcp/McpTrigger/transport/StreamableHttpTransport.ts": {
+    "before": "767007a14f7ec50d3b842eb6fcbc439bb56bd1e53e07a53f8b15e901def78198",
+    "after": "a17ac0ff1561d4b412773f1d525dda9244cb9fdddeea24fd6fc31cc8c94b523d"
+  },
+  "packages/cli/src/middlewares/body-parser.ts": {
+    "before": "ad4c9830d6260bb5be28662ae9bd15f7c4b323fdbb5510fa7fd50317c7087c5f",
+    "after": "b502f4d0e416ba27330e86564f80b0fad42e20d905fe7eee8979e6b3b40f7e9c"
+  },
+  "packages/cli/src/modules/mcp/mcp.controller.ts": {
+    "before": "c9be3007438a66f32b0a75eebbf6815aed77e0c3d522b1369bdd9fee74e0b1d0",
+    "after": "66d57396e9d3a9e35cb86705c42480cf87321e72c5186c5a387b491685d501cb"
+  },
+  "packages/cli/src/modules/mcp/mcp.service.ts": {
+    "before": "ac59714584c5a97b34b47091aef5265c984aee56c8d1d95def650543ae670b27",
+    "after": "8f28ddbd5617b185f24286f5120690f63a574aa5cf9f167f07d8daa831c2b0e8"
+  },
+  "packages/cli/src/webhooks/webhook-helpers.ts": {
+    "before": "822ef222cfd957c74b8051e129c237caf49c389d3d5defc41d11aea233fa9584",
+    "after": "8d2089f901ee4975e3e2a026087407223d94e34361fb7cd9fa0d0b19cec3b4c3"
+  }
+}

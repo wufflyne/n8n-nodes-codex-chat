@@ -1,6 +1,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { randomUUID, createHash, createHmac } from "node:crypto";
 import path from "node:path";
+import { isPromise } from "node:util/types";
 import { readPrivateFile, atomicWrite } from "../auth/store.js";
 import { mkdir, lstat, realpath, readdir, unlink } from "node:fs/promises";
 import { attestContext, validateContext, type ModelRequestContext } from "../gateway/context.js";
@@ -30,6 +31,7 @@ export interface ContextHooks {
     persist: (context: ModelRequestContext) => Promise<void>,
   ): Promise<ModelRequestContext | undefined>;
   run<T>(context: ModelRequestContext | undefined, action: () => T): T;
+  validateModelTurn?(context: ModelRequestContext | undefined, aiFinishReason: string): void;
   decorateModel<T>(model: T, kind?: ModelRequestContext["kind"]): T;
   decorateFetch(fetch: typeof globalThis.fetch): typeof globalThis.fetch;
 }
@@ -48,6 +50,55 @@ interface IntegrationConfig {
 }
 const runs = new AsyncLocalStorage<RunScope>(),
   operations = new AsyncLocalStorage<ModelRequestContext>();
+interface ModelCallFrame {
+  context?: ModelRequestContext;
+  parent?: ModelCallFrame;
+  closed: boolean;
+  gatewayAttempted: boolean;
+  gatewayBound: boolean;
+}
+const modelCalls = new AsyncLocalStorage<ModelCallFrame>();
+const contextFields: ReadonlyArray<keyof ModelRequestContext> = [
+  "version", "installationId", "projectId", "agentRevision", "conversationId", "branchId",
+  "runId", "turnId", "operationId", "operationIssuedAt", "kind", "cause", "parentOperationId",
+];
+function sameContext(a: ModelRequestContext | undefined, b: ModelRequestContext | undefined) {
+  return a === undefined || b === undefined
+    ? a === b
+    : contextFields.every((field) => a[field] === b[field]);
+}
+function assertOpen(frame: ModelCallFrame | undefined): asserts frame is ModelCallFrame {
+  if (!frame) throw new Error("The matched model call scope is missing.");
+  for (let current: ModelCallFrame | undefined = frame; current; current = current.parent)
+    if (current.closed) throw new Error("The matched model call scope has closed.");
+}
+function inModelCall<T>(
+  context: ModelRequestContext | undefined,
+  action: () => T,
+  parent?: ModelCallFrame,
+): T {
+  const frame: ModelCallFrame = {
+    context: context ? Object.freeze({ ...context }) : undefined,
+    parent, closed: false, gatewayAttempted: false, gatewayBound: false,
+  };
+  const close = () => {
+    frame.closed = true;
+    frame.context = undefined;
+    frame.gatewayAttempted = frame.gatewayBound = false;
+  };
+  return modelCalls.run(frame, () => {
+    try {
+      const value = action();
+      // Observe settlement without replacing the caller's Promise or rejection.
+      if (isPromise(value)) Promise.prototype.then.call(value, close, close);
+      else close();
+      return value;
+    } catch (error) {
+      close();
+      throw error;
+    }
+  });
+}
 let installed: ContextHooks | undefined;
 let configuration: Promise<{ config: IntegrationConfig; key: string }> | undefined;
 const knownOperations = new Map<string, ModelRequestContext>();
@@ -259,7 +310,19 @@ export async function installFromEnvironment(): Promise<ContextHooks> {
         input.agentRevision,
       );
     },
-    run: (context, action) => (context ? operations.run(context, action) : action()),
+    run: (context, action) =>
+      inModelCall(context, () => (context ? operations.run(context, action) : action())),
+    validateModelTurn: (context, aiFinishReason) => {
+      const frame = modelCalls.getStore();
+      assertOpen(frame);
+      if (!sameContext(frame.context, context))
+        throw new Error("The model turn context differs from its matched call scope.");
+      if (
+        frame.gatewayAttempted &&
+        (!context || !frame.gatewayBound || !["stop", "tool-calls"].includes(aiFinishReason))
+      )
+        throw new Error("The gateway model turn did not complete with a committed result.");
+    },
     decorateModel: <T>(model: T, kind?: ModelRequestContext["kind"]): T => {
       if (!runs.getStore() || !model || typeof model !== "object") return model;
       const captured = kind ? undefined : operations.getStore();
@@ -312,7 +375,16 @@ export async function installFromEnvironment(): Promise<ContextHooks> {
               ...(options.headers as Record<string, string> | undefined),
               "X-N8n-Model-Operation": context.operationId,
             };
-            return await value.call(target, { ...options, headers });
+            const invoke = () => value.call(target, { ...options, headers });
+            const frame = modelCalls.getStore();
+            if (captured) {
+              assertOpen(frame);
+              if (!sameContext(frame.context, context))
+                throw new Error("The decorated model differs from its matched call scope.");
+              return await invoke();
+            }
+            // A separately allocated helper owns a frame but retains inherited late-send guards.
+            return await inModelCall(context, invoke, frame);
           };
         },
       }) as T;
@@ -341,6 +413,12 @@ export function decorateModelFetch(fetchImpl: typeof fetch): typeof fetch {
     headers.delete("X-Codex-Wire-Context-Handshake");
     const attested = config.gatewayOrigins.includes(url.origin) && url.pathname === "/v1/responses";
     if (attested) {
+      const frame = modelCalls.getStore();
+      assertOpen(frame);
+      frame.gatewayAttempted = true;
+      frame.gatewayBound = false;
+      if (!frame.context)
+        throw new Error("The matched model call did not supply a durable context.");
       const scope = runs.getStore();
       if (!scope) throw new Error("A trusted n8n server run is required for gateway attestation.");
       if (
@@ -371,6 +449,8 @@ export function decorateModelFetch(fetchImpl: typeof fetch): typeof fetch {
           "The matched lifecycle hook did not supply a durable model operation context.",
         );
       validateContext(context);
+      if (!sameContext(frame.context, context))
+        throw new Error("The attested operation differs from its matched call scope.");
       if (
         context.projectId !== scope.identity.projectId ||
         context.conversationId !== scope.identity.conversationId ||
@@ -410,6 +490,8 @@ export function decorateModelFetch(fetchImpl: typeof fetch): typeof fetch {
       headers.set("X-Codex-Wire-Context", attestContext(context, key));
       headers.set("X-Codex-Wire-Installation-Key", key);
       headers.set("X-Codex-Wire-Context-Handshake", handshake.id);
+      assertOpen(frame);
+      frame.gatewayBound = true;
     }
     const response = await fetchImpl(input, {
       ...init,

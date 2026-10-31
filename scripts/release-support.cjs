@@ -57,7 +57,9 @@ function releaseNames(meta, environment = process.env) {
 }
 function releaseImages(meta, environment = process.env) {
   const { prefix } = releaseNames(meta, environment);
-  const documented = `${releaseNames(meta, {}).prefix}-n8n:${meta.version}`;
+  const documented = meta.version.startsWith("0.0.")
+    ? `${releaseNames(meta, {}).prefix}-n8n:${meta.version}`
+    : `codex-wire-n8n:${meta.version}`;
   const image = `${prefix}-n8n:${meta.version}`;
   return {
     image,
@@ -94,7 +96,7 @@ function validatePackageEntries(entries) {
     if (
       entry.includes("..") ||
       entry.includes("\\") ||
-      !/^package\/(?:package\.json|README\.md|LICENSE|compatibility\.json|Dockerfile\.gateway|compose\.gateway\.example\.yaml|dist\/[A-Za-z0-9_./-]+\.(?:js|d\.ts|svg)|dist\/gateway\/console\/(?:index\.html|console\.css)|dist\/integration\/context-build\.json|integration\/n8n-2\.45\.6\/(?:manifest\.json|model-request-context\.patch)|integration\/scripts\/build-overlay\.cjs|docs\/[A-Za-z0-9_-]+\.md|examples\/[A-Za-z0-9_-]+\.(?:json|cjs))$/.test(
+      !/^package\/(?:package\.json|README\.md|LICENSE|compatibility\.json|Dockerfile\.gateway|compose\.gateway\.example\.yaml|dist\/[A-Za-z0-9_./-]+\.(?:js|d\.ts|svg)|dist\/gateway\/console\/(?:index\.html|console\.css)|dist\/integration\/context-build\.json|integration\/n8n-2\.45\.6\/(?:manifest\.json|model-request-context\.patch)|integration\/scripts\/build-overlay\.cjs|integration\/security\/(?:[a-z0-9-]+\.(?:json|patch)|(?:build-security|install-security|apply-backports|backport-inputs|patch-editor|prepare-os|install-os|os-utils)\.cjs|backports\/[a-z0-9_./-]+\.(?:json|patch|ts|mjs)|backports\/(?:zod|smartquotes|linkify)\/LICENSE|os\/manifest\.json|os\/keys\/[A-Za-z0-9@._-]+\.pub)|docs\/[A-Za-z0-9_-]+\.md|examples\/[A-Za-z0-9_-]+\.(?:json|cjs))$/.test(
         entry,
       )
     )

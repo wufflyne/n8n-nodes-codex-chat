@@ -93,6 +93,13 @@ export async function readJson(
   maxBytes = 2 * 1024 * 1024,
   signal?: AbortSignal,
 ): Promise<unknown> {
+  const bytes = await readBytes(response, maxBytes, signal);
+  try { return JSON.parse(bytes.toString("utf8")) as unknown; }
+  catch { throw new CodexError("protocol", "The provider returned an invalid JSON response."); }
+}
+
+/** Bounded bytes for protocols that must durably capture success before parsing. */
+export async function readBytes(response: Response, maxBytes: number, signal?: AbortSignal): Promise<Buffer> {
   if (!response.body)
     throw new CodexError(
       "protocol",
@@ -113,7 +120,7 @@ export async function readJson(
         );
       chunks.push(next.value);
     }
-    return JSON.parse(Buffer.concat(chunks).toString("utf8")) as unknown;
+    return Buffer.concat(chunks);
   } catch (error) {
     if (error instanceof CodexError) throw error;
     throw new CodexError(

@@ -395,7 +395,6 @@ export class ItemResolver {
           item.call_id = `call_cw_${randomUUID().replaceAll("-", "")}`;
       }
       if (item.type === "reasoning") {
-        item.summary ??= [];
         item.status = "completed";
       }
       if (stored) {

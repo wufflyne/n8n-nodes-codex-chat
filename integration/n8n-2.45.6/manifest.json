@@ -1,7 +1,7 @@
 {
   "packages/@n8n/agents/src/runtime/model/model-request-context.ts": {
     "before": null,
-    "after": "4b7109514b220e690c50269ffda9861547bff357e34d070a732e10b04527f821"
+    "after": "fe19bf7b879c99997e28dce51fe80b6e8c9de83beb8ffce65f08dcd3db615447"
   },
   "packages/@n8n/agents/src/types/sdk/agent.ts": {
     "before": "4d32024acb2af3761d093791cde683b73bab1ef9c6ae1074c0c063b685d0d092",
@@ -25,7 +25,7 @@
   },
   "packages/@n8n/agents/src/runtime/loop/agent-runtime.ts": {
     "before": "a6b05e744fad6c4bb7d036e4986dd4cd9207e55cea29a9cd2d8763aeab12bc00",
-    "after": "48906ed89e515a274a4114b427ea423a0451965e2cd8d3abed381559462f1822"
+    "after": "8b46e22d8912819db542a1f284ca796448e8044da8ee8dbbfbfafe935d096776"
   },
   "packages/@n8n/agents/src/runtime/memory/title-generation.ts": {
     "before": "a9e93716396a0b73d1c6fb491d229a0158d5372e1f72ca6bddf2f06d717445ee",
@@ -61,7 +61,7 @@
   },
   "packages/cli/src/modules/agents/sub-agents/sub-agent-runner.ts": {
     "before": "a1e4f562d70ffdbd1ad46712494eda0f806a5e2de6b2114595c5c3b7a5d9aad4",
-    "after": "80549620d307357caf5834aaeac2d66aeb267796ffcdc29bbc239ab736941fb6"
+    "after": "f337215af689aade4227b7c14b5cd8f63b97e30612ceca1e15d8c5420ac74f10"
   },
   "packages/cli/src/modules/agents/background/sub-agent-background-runner.ts": {
     "before": "4785b99ec833ea0fad15bcc95111e505bb61e6d6f21f535f781e0a86bbaa154c",

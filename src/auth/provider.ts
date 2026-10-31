@@ -3,6 +3,7 @@ import {
   admissionError,
   delay,
   readJson,
+  readBytes,
   requestScope,
   type Fetch,
 } from "../core/http.js";
@@ -22,7 +23,7 @@ export interface VerifiedTokens {
 }
 export interface AuthProvider {
   verify(tokens: TokenSet, allowExpired?: boolean): Promise<VerifiedTokens>;
-  refresh(tokens: TokenSet): Promise<TokenSet>;
+  refresh(tokens: TokenSet, capture?: (bytes: Buffer) => Promise<void>): Promise<TokenSet>;
 }
 
 const AUTH_METADATA = "https://api.openai.com/auth";
@@ -116,7 +117,7 @@ export class CodexAuthProvider implements AuthProvider {
     }
   }
 
-  async refresh(tokens: TokenSet): Promise<TokenSet> {
+  async refresh(tokens: TokenSet, capture?: (bytes: Buffer) => Promise<void>): Promise<TokenSet> {
     assert(
       tokens.refreshToken,
       "Automatic renewal is unavailable for this access-token-only session. Reconnect this profile.",
@@ -167,10 +168,12 @@ export class CodexAuthProvider implements AuthProvider {
           response.status,
         );
       }
-      return tokenResponse(
-        await readJson(response, 256 * 1024, scope.signal),
-        tokens,
-      );
+      const bytes = await readBytes(response, 256 * 1024, scope.signal);
+      await capture?.(bytes);
+      let parsed: unknown;
+      try { parsed = JSON.parse(bytes.toString("utf8")); }
+      catch { throw new CodexError("protocol", "The successful renewal response was not valid JSON. Captured recovery material remains fenced."); }
+      return tokenResponse(parsed, tokens);
     } catch (error) {
       if (error instanceof CodexError) throw error;
       throw new CodexError(

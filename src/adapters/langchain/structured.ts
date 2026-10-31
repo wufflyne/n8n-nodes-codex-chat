@@ -1,3 +1,5 @@
+import { isDeepStrictEqual } from "node:util";
+import type { OutputContract } from "../../kernel/output-contract.js";
 import { validator } from "../../kernel/structured.js";
 export { validatedOutputFormat, type StructuredFormat } from "../../kernel/structured.js";
 import { RunnableLambda, type Runnable } from "@langchain/core/runnables";
@@ -54,38 +56,36 @@ export function structuredRunnable<T extends Record<string, unknown>>(
     /^[A-Za-z0-9_-]{1,64}$/.test(name),
     "The structured output name must be a valid function identifier.",
   );
-  const bound =
-    method === "jsonSchema"
-      ? model.withConfig({
-          codexStructuredOutput: true,
-          codexOutputFormat: {
-            type: "json_schema",
-            name,
-            strict: config.strict ?? true,
-            schema: snapshot,
-          },
-        })
-      : model.bindTools(
-          [
-            {
-              type: "function",
-              function: {
-                name,
-                description:
-                  typeof snapshot.description === "string"
-                    ? snapshot.description
-                    : "Return the requested structured result.",
-                parameters: snapshot,
-                ...(config.strict === undefined ? {} : { strict: config.strict }),
-              },
-            },
-          ],
-          { codexStructuredOutput: true },
-        );
+  const format = { type: "json_schema" as const, name, strict: config.strict ?? true, schema: snapshot };
+  const fn = {
+    type: "function" as const, name,
+    description: typeof snapshot.description === "string" ? snapshot.description : "Return the requested structured result.",
+    parameters: snapshot,
+    ...(config.strict === undefined ? {} : { strict: config.strict }),
+  };
+  const contract: OutputContract = method === "jsonSchema"
+    ? { kind: "json", format } : { kind: "owned-function", tool: fn };
+  const tools = [{ type: "function", function: { ...fn, type: undefined } }];
+  delete tools[0]!.function.type;
+  const bound = method === "jsonSchema"
+    ? model.withConfig({ codexOutputContract: contract, codexOutputFormat: format })
+    : model.bindTools(tools, { codexOutputContract: contract });
   return RunnableLambda.from(async (input: BaseLanguageModelInput, options) => {
+    const supplied = options as CodexCallOptions;
+    assert(supplied.codexOutputContract === undefined || isDeepStrictEqual(supplied.codexOutputContract, contract), "The owned structured output contract cannot be overridden.");
+    assert(supplied.codexOutputFormat === undefined || (method === "jsonSchema" && isDeepStrictEqual(supplied.codexOutputFormat, format)), "The owned structured output format cannot be overridden.");
+    assert(supplied.tools === undefined || isDeepStrictEqual(supplied.tools, method === "jsonSchema" ? [] : tools), "The owned structured output tools cannot be overridden.");
     const raw = await bound.invoke(input, options);
+    // LangChain chunks discard invalid_tool_calls when no executable chunks exist.
+    // Restore diagnostics only inside their owning parser, without creating tool calls.
+    if (raw.response_metadata.ownedStructuredDiagnostic === true && Array.isArray(raw.additional_kwargs.codex_owned_diagnostics))
+      raw.invalid_tool_calls = structuredClone(raw.additional_kwargs.codex_owned_diagnostics) as typeof raw.invalid_tool_calls;
     let parsed: T | null = null;
     try {
+      assert(
+        raw.response_metadata.ownedStructuredDiagnostic !== true,
+        "The owned structured response did not satisfy its output contract.",
+      );
       assert(
         raw.response_metadata.structuredInvalidArguments !== true,
         "The structured function arguments were not valid JSON.",

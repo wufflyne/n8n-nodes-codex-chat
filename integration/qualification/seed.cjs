@@ -9,6 +9,9 @@ const { GatewayAuthorization } = require("../../dist/gateway/auth");
 const { PROVIDER, ISSUER, CODEX_CLIENT_ID } = require("../../dist/core/types");
 
 async function main() {
+  const adminOrigin = new URL(process.env.QUALIFICATION_ADMIN_ORIGIN || "http://127.0.0.1:15911");
+  if (adminOrigin.protocol !== "http:" || adminOrigin.hostname !== "127.0.0.1" || !adminOrigin.port || adminOrigin.href !== adminOrigin.origin + "/")
+    throw Error("Use an explicit loopback HTTP qualification admin origin without credentials, path, query or fragment.");
   const root = path.resolve(process.env.QUALIFICATION_ROOT || "");
   if (!process.env.QUALIFICATION_ROOT || !path.isAbsolute(process.env.QUALIFICATION_ROOT))
     throw Error("Select a fresh absolute qualification directory.");
@@ -62,6 +65,7 @@ async function main() {
       },
     });
   }
+  await store.rotation.initialize();
   const state = new StateRepository(path.join(data, "state/gateway.db"), key);
   await state.open();
   let fixed, pool, installation, administrator;
@@ -113,7 +117,7 @@ async function main() {
     admin: {
       host: "0.0.0.0",
       port: 8788,
-      origin: "http://127.0.0.1:15888",
+      origin: adminOrigin.origin,
       allowLoopbackHttp: true,
       bootstrapFile: "/var/lib/codex-wire/control/bootstrap.key",
     },

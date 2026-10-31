@@ -1,6 +1,6 @@
 --- /dev/null
 +++ b/packages/@n8n/agents/src/runtime/model/model-request-context.ts
-@@ -0,0 +1,37 @@
+@@ -0,0 +1,38 @@
 +/** Server-owned lifecycle hook; never configured from agent prompts or custom headers. */
 +export interface ModelOperationContext {
 +	version: 1;
@@ -30,6 +30,7 @@
 +		persist: (context: ModelOperationContext) => Promise<void>,
 +	): Promise<ModelOperationContext | undefined>;
 +	run<T>(context: ModelOperationContext | undefined, action: () => T): T;
++	validateModelTurn?(context: ModelOperationContext | undefined, aiFinishReason: string): void;
 +	decorateModel<T>(model: T, kind?: ModelOperationContext['kind']): T;
 +	decorateFetch(fetch: typeof globalThis.fetch): typeof globalThis.fetch;
 +}
@@ -189,19 +190,37 @@
  			model: staticContext.model,
  			system: prompt.system,
  			messages: prompt.messages,
-@@ -1114,7 +1138,10 @@
+@@ -1114,12 +1138,23 @@
  					return undefined;
  				}
  			}
 -			const turn = await sink.callModel(modelCallContext);
+-			// Price the turn before guardrails see it. The finish chunk prices
+-			// the summed tokens later; mergeUsage drops per-turn cost.
+-			turn.usage = this.applyCost(turn.usage);
+-			if (guardrails && guardCtx) await guardrails.after(guardCtx, turn.usage);
+-			return turn;
 +			const hooks = modelRequestHooks();
-+			const turn = await (hooks
-+				? hooks.run(modelCallContext.modelRequestContext, () => sink.callModel(modelCallContext))
-+				: sink.callModel(modelCallContext));
- 			// Price the turn before guardrails see it. The finish chunk prices
- 			// the summed tokens later; mergeUsage drops per-turn cost.
- 			turn.usage = this.applyCost(turn.usage);
-@@ -1127,6 +1154,18 @@
++			const invoke = async () => {
++				const turn = await sink.callModel(modelCallContext);
++				// Price the turn before guardrails see it. The finish chunk prices
++				// the summed tokens later; mergeUsage drops per-turn cost.
++				turn.usage = this.applyCost(turn.usage);
++				if (guardrails && guardCtx) await guardrails.after(guardCtx, turn.usage);
++				try {
++					hooks?.validateModelTurn?.(modelCallContext.modelRequestContext, turn.aiFinishReason);
++				} catch (error) {
++					// Failed gateway turns cannot reach retry/folding; retain their usage once.
++					this.recordTurnUsage(ctx, sink, state, turn);
++					throw error;
++				}
++				return turn;
++			};
++			return await (hooks ? hooks.run(modelCallContext.modelRequestContext, invoke) : invoke());
+ 		};
+ 
+ 		let turn = await callModel();
+@@ -1127,6 +1162,18 @@
  		for (let retry = 0; turn && retry < MAX_EMPTY_TURN_RETRIES && isEmptyModelTurn(turn); retry++) {
  			this.recordTurnUsage(ctx, sink, state, turn);
  			this.assertNotAborted(ctx.abortScope);
@@ -220,7 +239,7 @@
  			turn = await callModel();
  		}
  		if (!turn) return undefined;
-@@ -1215,7 +1254,7 @@
+@@ -1215,7 +1262,7 @@
  		this.emitTurnEnd(turn.newMessages, extractSettledToolCalls(ctx.list.responseDelta()));
  		// All tools have settled. Observe before the next call and its checkpoint.
  		await this.memory.maybeObserveMidRun(ctx.list, ctx.options);
@@ -229,7 +248,7 @@
  			await this.persistStepCheckpoint(
  				ctx.list,
  				state.totalUsage,
-@@ -1335,6 +1374,8 @@
+@@ -1335,6 +1382,8 @@
  		markSuspendedToolCalls(list, pendingToolCalls);
  
  		const state: SerializableAgentState = {
@@ -238,7 +257,7 @@
  			persistence: options?.persistence,
  			status: 'suspended',
  			messageList: list.serialize(),
-@@ -1371,6 +1412,7 @@
+@@ -1371,6 +1420,7 @@
  		const checkpointOptions = buildCheckpointOptions(options, maxIterations, iterationCount);
  
  		const state: SerializableAgentState = {
@@ -246,7 +265,7 @@
  			persistence: options?.persistence,
  			status: 'running',
  			messageList: list.serialize(),
-@@ -1378,6 +1420,7 @@
+@@ -1378,6 +1428,7 @@
  			usage: totalUsage,
  			...checkpointOptions,
  		};
@@ -613,7 +632,17 @@
  	}
  
  	async resumeForeground(
-@@ -380,54 +389,69 @@
+@@ -346,7 +355,8 @@
+ 					: {}),
+ 			});
+ 
+-			agent = reconstructed.agent;
++			const activeAgent = reconstructed.agent;
++			agent = activeAgent;
+ 			context.abortSignal?.throwIfAborted();
+ 			const forwardBudgetNotice = context.onBudgetNotice
+ 				? (notice: AgentBudgetNotice) =>
+@@ -380,54 +390,69 @@
  			);
  			context.abortSignal?.throwIfAborted();
  			executionStarted = operation.type === 'run';
@@ -647,10 +676,10 @@
 +					parentOperationId: context.modelRequestParentOperationId,
 +					kind: 'subagent',
 +				},
-+				agent,
++				activeAgent,
 +				async () => {
 +					if (operation.type === 'run') {
-+						resultStream = await agent.stream(
++						resultStream = await activeAgent.stream(
 +							bindExecutionInput(userMessage ?? '', admission.inputMessageIds),
 +							{
 +								...executionOptions,
@@ -699,7 +728,7 @@
 -				});
 -			}
 +					} else if (operation.type === 'resumePaused') {
-+						resultStream = await agent.resumePaused({
++						resultStream = await activeAgent.resumePaused({
 +							...executionOptions,
 +							hostMetadata: { [EXECUTION_METADATA_KEY]: executionId },
 +							runId: operation.request.childRunId,
@@ -709,7 +738,7 @@
 +							},
 +						});
 +					} else {
-+						resultStream = await agent.resume('stream', operation.request.resumeData, {
++						resultStream = await activeAgent.resume('stream', operation.request.resumeData, {
 +							...executionOptions,
 +							hostMetadata: { [EXECUTION_METADATA_KEY]: executionId },
 +							runId: operation.request.childRunId,
@@ -729,7 +758,7 @@
  			const consumed = await consumeAgentStream(
  				resultStream,
  				recorder,
-@@ -527,9 +551,8 @@
+@@ -527,9 +552,8 @@
   */
  async function getReconstructionService() {
  	// eslint-disable-next-line import-x/no-cycle

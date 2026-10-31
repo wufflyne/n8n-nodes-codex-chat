@@ -206,19 +206,24 @@ export class ResetStore {
   }
   async ledger(scope: string): Promise<ResetLedger> {
     scope = this.id(scope);
+    if (!(await this.hasLedger(scope))) {
+      assert(!await this.initialized(scope), "The established reset account journal is missing. Preserve the store; reset actions remain blocked.");
+      const files = await readdir(path.join(this.directory, "executions"));
+      assert(files.length <= 8192, "The reset execution reservation store exceeds its supported bound.");
+      for (const file of files) {
+        const match = /^([a-f0-9]{64})\.json\.enc$/.exec(file);
+        if (!match) continue;
+        const reservation = await this.reservation(match[1]!);
+        assert(reservation && reservation.accountScope !== scope, "The reset account journal is missing despite existing execution evidence. Preserve the store; reset actions remain blocked.");
+      }
+      return { schemaVersion: 1, revision: 0, accountScope: scope, actions: [] };
+    }
     const value = await this.read<ResetLedger>(
       path.join(this.directory, `${scope}.json.enc`),
       `codex-reset-ledger:v1:${scope}`,
     );
-    if (!value)
-      return {
-        schemaVersion: 1,
-        revision: 0,
-        accountScope: scope,
-        actions: [],
-      };
     assert(
-      value.schemaVersion === 1 &&
+      value && value.schemaVersion === 1 &&
         value.accountScope === scope &&
         Number.isSafeInteger(value.revision) &&
         Array.isArray(value.actions) &&
@@ -246,19 +251,34 @@ export class ResetStore {
           ].includes(a.state),
         "The reset intent format is invalid.",
       );
+    await this.markInitialized(scope);
     return structuredClone(value);
+  }
+  private async initialized(scope: string): Promise<boolean> {
+    const filename = path.join(this.directory, `${this.id(scope)}.initialized`);
+    try { await lstat(filename); }
+    catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return false; throw new CodexError("storage", "The reset initialization marker could not be inspected safely."); }
+    assert(await readPrivateFile(filename, 128) === "codex-wire/reset-ledger/v1\n", "The reset initialization marker is invalid. Preserve the store; reset actions remain blocked.");
+    return true;
+  }
+  private async markInitialized(scope: string) {
+    if (!await this.initialized(scope))
+      await atomicWrite(path.join(this.directory, `${this.id(scope)}.initialized`), "codex-wire/reset-ledger/v1\n");
   }
   async writeLedger(ledger: ResetLedger) {
     assert(
       ledger.actions.length <= 256,
       "The reset journal is full. Ordinary inference is still available.",
     );
+    await this.prepare();
+    await this.initialized(ledger.accountScope);
     ledger.revision++;
     await this.write(
       path.join(this.directory, `${this.id(ledger.accountScope)}.json.enc`),
       `codex-reset-ledger:v1:${ledger.accountScope}`,
       ledger,
     );
+    await this.markInitialized(ledger.accountScope);
   }
   private reservationPath(key: string) {
     return path.join(this.directory, "executions", `${this.id(key)}.json.enc`);
@@ -308,9 +328,12 @@ export class ResetStore {
       const stat = await lstat(
         path.join(this.directory, `${this.id(scope)}.json.enc`),
       );
-      return stat.isFile() && !stat.isSymbolicLink();
-    } catch {
-      return false;
+      assert(stat.isFile() && !stat.isSymbolicLink() && (stat.mode & 0o077) === 0, "The reset account journal must be a private regular file. Preserve the store; reset actions remain blocked.");
+      return true;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+      if (error instanceof CodexError) throw error;
+      throw new CodexError("storage", "The reset account journal could not be inspected safely.");
     }
   }
   async reserve(key: string, scope: string, id: string): Promise<boolean> {

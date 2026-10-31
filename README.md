@@ -1,7 +1,7 @@
 <h1 align="center">Codex Wire for n8n</h1>
 
 <p align="center">Codex subscription accounts for native n8n workflows and standalone Agents.</p>
-<p align="center"><strong>v0.0.5</strong> · Self-hosted · Four nodes + explicit gateway · MIT</p>
+<p align="center"><strong>v0.1.0</strong> · Self-hosted · Four nodes + explicit gateway · MIT</p>
 
 Codex Wire connects an independently linked Codex account to n8n's AI Agent, tools, memory and parsers. Model requests go directly over HTTP; n8n owns workflow execution and tool calls. There is no embedded Codex CLI agent or Platform API-key fallback.
 
@@ -11,7 +11,7 @@ This is an independent, experimental integration with the private Codex backend.
 
 The optional gateway provides a protected four-view account console, device/manual onboarding, scoped connection keys, bounded Responses streaming and a full account pool. Native workflows and standalone Agents use the same sole account owner. The pool requires the included matched n8n lifecycle integration; stock n8n supports a fixed-account connection. See [gateway setup, privacy and recovery](docs/gateway.md).
 
-The local release includes a single npm tarball and matched gateway/n8n images. [Qualification coverage](docs/qualification.md) and [compatibility metadata](compatibility.json) distinguish synthetic installation tests from historical 0.0.4 live observations. Public publication and production deployment are separate operator steps.
+The distribution uses a single npm tarball and separately identified gateway/n8n image variants. The matched Agents companion supplies lifecycle integration and accepts community installation; the legacy CUSTOM embedded build has its own namespace and helper path. [Installation](docs/install.md#build-from-source), [qualification coverage](docs/qualification.md) and [compatibility metadata](compatibility.json) identify the variants and the scope of synthetic and live observations. Use the exact package and image identities in the release receipt when deploying.
 
 ## Four focused nodes
 
@@ -26,17 +26,17 @@ Start with one account and **Codex Chat Model**. Reasoning, speed, output, relia
 
 ## Quick start
 
-Use a compatible **self-hosted n8n** instance and a Codex account you control. The verified versions are listed below. Account storage and its encryption key are configured once on the server; model selection and workflow execution stay in n8n.
+Use a compatible **self-hosted n8n** instance and a Codex account you control. The pinned versions are listed below. Account storage and its encryption key are configured once on the server; model selection and workflow execution stay in n8n.
 
 ### 1. Install the package
 
 As an n8n Owner or Admin, open **Settings → Community Nodes → Install** and enter:
 
 ```text
-n8n-nodes-codex-chat@0.0.5
+n8n-nodes-codex-chat@0.1.0
 ```
 
-Until publication, use the reviewed local tarball and the manual installation procedure. After publication, acknowledge n8n's community-code notice and install. **Codex Chat Model**, **Codex Account**, **Codex Account Router** and **Codex Image** appear together. Community and unverified packages must be enabled on the instance.
+Acknowledge n8n's community-code notice and install. **Codex Chat Model**, **Codex Account**, **Codex Account Router** and **Codex Image** appear together. Community and unverified packages must be enabled on the instance. For an offline deployment, use the matching release tarball with the manual installation procedure.
 
 For a terminal-based installation, use the [npm installation guide](docs/install.md#manual-npm-installation). A standalone Docker build remains available under [build from source](docs/install.md#build-from-source).
 
@@ -46,21 +46,18 @@ Follow [server setup](docs/install.md#configure-account-storage) to provision `N
 
 ### 3. Link your account
 
-These commands use the official n8n container's default community-package directory and a Compose service named `n8n`; adjust them for your deployment:
+In embedded mode, pause new workflow admissions, let active executions finish, then stop the sole n8n process before account changes. The one-off helper must use that same service image, installed package, volume, key and user:
 
 ```sh
-docker compose exec n8n sh -c \
-  'umask 077; mkdir -p /home/node/.n8n/codex-wire/bindings'
-
-docker compose exec n8n \
-  node /home/node/.n8n/nodes/node_modules/n8n-nodes-codex-chat/dist/cli.js \
-  device-login --label 'Automation' \
+docker compose stop -t 120 n8n
+docker compose run --rm --no-deps --pull never --entrypoint node n8n \
+  /home/node/.n8n/nodes/node_modules/n8n-nodes-codex-chat/dist/cli.js \
+  device-login --offline --label 'Automation' \
   --binding-output /home/node/.n8n/codex-wire/bindings/automation.json
+docker compose up -d --no-deps n8n
 ```
 
-Follow the login link and one-time code in your terminal. [Copy the protected binding](docs/install.md#link-an-account) and enter its `profileId` and `bindingSecret` in an n8n **Codex Account** credential. A renewable profile must exclusively own its rotating refresh token; use a separate login for this automation.
-
-The helper also supports [manual import and reconnecting](docs/install.md#manual-import-and-reconnect). The npm installation path uses `node …/dist/cli.js`; the bundled Docker image has its own helper path.
+Prepare the private binding directory first and follow the complete [maintenance and account-link procedure](docs/install.md#link-an-account), including failed or interrupted operations. Copy the protected binding into an n8n **Codex Account** credential. Gateway deployments use the online helper or account console through the existing owner; they do not stop n8n for account changes. Each rotating token has one durable owner across the store; separate verified login families for the same account remain supported.
 
 ### 4. Connect a native AI Agent
 
@@ -92,7 +89,7 @@ Examples use the npm community-package namespace and can be imported directly af
 
 ## Compatibility
 
-| Component | Tested version |
+| Component | Pinned version |
 | --- | --- |
 | n8n | `2.45.6` |
 | n8n-workflow | `2.45.3` |
@@ -102,7 +99,7 @@ Examples use the npm community-package namespace and can be imported directly af
 
 Embedded mode supports one trusted self-hosted execution process; gateway mode gives n8n no OAuth/store access and centralizes ownership. The matched standalone Agents integration preserves operation identity through approval/checkpoint restart. Native workflow continuation after a process restart, queue/multiworker mode, direct PDF/audio/video input, embeddings and hosted provider tools are outside this release. New protocol types require an adapter update. The backend can change independently of this package.
 
-[Compatibility metadata](compatibility.json) separates synthetic/native tests from limited live evidence. All 0.0.5 real-account activity remains unqualified; historical baseline live observations do not qualify changed 0.0.5 bytes. Community loading uses the pinned host dependency resolution. The installation guide covers the required server configuration and helper path. No n8n Cloud support or official OpenAI/n8n affiliation is claimed.
+[Compatibility metadata](compatibility.json) separates synthetic/native tests from limited live evidence; the release receipt binds those observations to exact artifacts. A stable community-package release does not make the independently changing private backend a stable public API. Community loading uses the pinned host dependency resolution. The installation guide covers the required server configuration and helper path. No n8n Cloud support or official OpenAI/n8n affiliation is claimed.
 
 ## Development
 

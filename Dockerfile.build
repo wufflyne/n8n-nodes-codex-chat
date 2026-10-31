@@ -11,6 +11,7 @@ COPY --chown=node:node src ./src
 COPY --chown=node:node scripts ./scripts
 COPY --chown=node:node test ./test
 COPY --chown=node:node integration ./integration
+COPY --from=security-bundle --chown=node:node / /build/security/
 COPY --chown=node:node Dockerfile.gateway compose.gateway.example.yaml ./
 RUN npm ci --prefix integration/consumer --ignore-scripts --no-audit --no-fund
 ENV CODEX_WIRE_SDK_ROOT=/build/integration/consumer/node_modules

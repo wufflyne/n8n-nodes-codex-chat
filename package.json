@@ -1,6 +1,6 @@
 {
   "name": "n8n-nodes-codex-chat",
-  "version": "0.0.5",
+  "version": "0.1.0",
   "description": "An independent, experimental Codex subscription integration for self-hosted n8n.",
   "license": "MIT",
   "main": "dist/index.js",
@@ -15,7 +15,19 @@
     "Dockerfile.gateway",
     "compose.gateway.example.yaml",
     "integration/n8n-2.45.6",
-    "integration/scripts/build-overlay.cjs"
+    "integration/scripts/build-overlay.cjs",
+    "integration/security/*.json",
+    "integration/security/*.patch",
+    "integration/security/build-security.cjs",
+    "integration/security/install-security.cjs",
+    "integration/security/apply-backports.cjs",
+    "integration/security/backport-inputs.cjs",
+    "integration/security/patch-editor.cjs",
+    "integration/security/prepare-os.cjs",
+    "integration/security/install-os.cjs",
+    "integration/security/os-utils.cjs",
+    "integration/security/backports",
+    "integration/security/os"
   ],
   "bin": {
     "n8n-codex-account": "dist/cli.js",

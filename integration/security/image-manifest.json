@@ -1,0 +1,118 @@
+{
+  "baseDigest": "sha256:45edf89655fd66dd55ea9336c1791ad14777599fdbf6c5aec6db583ede99a40b",
+  "replacePackages": [
+    {
+      "path": "usr/lib/node_modules/npm/node_modules/undici",
+      "beforeVersion": "6.28.1",
+      "beforePackageHash": "a5c7791bf6fa19f9555ad4f8eb0ff2537cd8b7f63606d9b69746efe1c75aec92",
+      "name": "undici",
+      "replacement": "undici6"
+    },
+    {
+      "path": "usr/local/lib/node_modules/n8n/node_modules/.pnpm/@modelcontextprotocol+core@2.0.0/node_modules/@modelcontextprotocol/core",
+      "beforeVersion": "2.0.0",
+      "beforePackageHash": "dc2e8e1fc31878b0b537b0ea034d4a11284cce20fe81f4c6ea823dd6db7e7ad5",
+      "name": "@modelcontextprotocol/core",
+      "replacement": "@modelcontextprotocol/core"
+    },
+    {
+      "path": "usr/local/lib/node_modules/n8n/node_modules/.pnpm/@modelcontextprotocol+node@2.0.0_@modelcontextprotocol+server@2.0.0_hono@4.12.34/node_modules/@modelcontextprotocol/node",
+      "beforeVersion": "2.0.0",
+      "beforePackageHash": "5f14c5fc755be0d0c97f2581f0c79fb812137015adff811fb620ee43db671e40",
+      "name": "@modelcontextprotocol/node",
+      "replacement": "@modelcontextprotocol/node"
+    },
+    {
+      "path": "usr/local/lib/node_modules/n8n/node_modules/.pnpm/@modelcontextprotocol+sdk@1.31.0_supports-color@8.1.1_zod@3.25.76/node_modules/@modelcontextprotocol/sdk",
+      "beforeVersion": "1.31.0",
+      "beforePackageHash": "db4753c0bcdc297ef0dd5f6573219e461270e542146d6574de0ef80dde0f7b4b",
+      "name": "@modelcontextprotocol/sdk",
+      "replacement": "@modelcontextprotocol/sdk"
+    },
+    {
+      "path": "usr/local/lib/node_modules/n8n/node_modules/.pnpm/@modelcontextprotocol+server@2.0.0/node_modules/@modelcontextprotocol/server",
+      "beforeVersion": "2.0.0",
+      "beforePackageHash": "ff7f23c4a4a3162a34a2cb21087e1844bb8631724d8e43aa14aaa86d3f7e07c2",
+      "name": "@modelcontextprotocol/server",
+      "replacement": "@modelcontextprotocol/server"
+    },
+    {
+      "path": "usr/local/lib/node_modules/n8n/node_modules/.pnpm/body-parser@2.3.0_supports-color@8.1.1/node_modules/body-parser",
+      "beforeVersion": "2.3.0",
+      "beforePackageHash": "ae841913f51a2b463ba86e011564784654dad953352dc972baf59f87da4b2d36",
+      "name": "body-parser",
+      "replacement": "body-parser"
+    },
+    {
+      "path": "usr/local/lib/node_modules/n8n/node_modules/.pnpm/follow-redirects@1.16.0_debug@4.3.4_supports-color@8.1.1_/node_modules/follow-redirects",
+      "beforeVersion": "1.16.0",
+      "beforePackageHash": "42d8d50f86a6a8ab62f2c9d9d69532fc51de63becfd1a96681812e479443960c",
+      "name": "follow-redirects",
+      "replacement": "follow-redirects"
+    },
+    {
+      "path": "usr/local/lib/node_modules/n8n/node_modules/.pnpm/follow-redirects@1.16.0_debug@4.4.3_supports-color@8.1.1_/node_modules/follow-redirects",
+      "beforeVersion": "1.16.0",
+      "beforePackageHash": "42d8d50f86a6a8ab62f2c9d9d69532fc51de63becfd1a96681812e479443960c",
+      "name": "follow-redirects",
+      "replacement": "follow-redirects"
+    },
+    {
+      "path": "usr/local/lib/node_modules/n8n/node_modules/.pnpm/markdown-it@13.0.2/node_modules/markdown-it",
+      "beforeVersion": "13.0.2",
+      "beforePackageHash": "fd650703c3397f1159926439031229fe56fa6650ed66bdcf7fee6ef97eb27741",
+      "name": "markdown-it",
+      "replacement": "markdown-it"
+    },
+    {
+      "path": "usr/local/lib/node_modules/n8n/node_modules/.pnpm/multer@2.3.0/node_modules/multer",
+      "beforeVersion": "2.3.0",
+      "beforePackageHash": "156dda5673dab816dcb421e7fe7545d098ad238e11d6bc2c9fc62dc57c701972",
+      "name": "multer",
+      "replacement": "multer"
+    },
+    {
+      "path": "usr/local/lib/node_modules/n8n/node_modules/.pnpm/undici@6.29.0/node_modules/undici",
+      "beforeVersion": "6.29.0",
+      "beforePackageHash": "0fedea32b64c5efbadeec2c6cacd1b6cbb2fab9535456ef5cde3e6192e078748",
+      "name": "undici",
+      "replacement": "undici6"
+    },
+    {
+      "path": "usr/local/lib/node_modules/n8n/node_modules/.pnpm/undici@7.29.1/node_modules/undici",
+      "beforeVersion": "7.29.1",
+      "beforePackageHash": "10e55f4adb6a43e72823ea235ff6a0c777db1ef68e3a1c810f0246e1b9332d8b",
+      "name": "undici",
+      "replacement": "undici7"
+    },
+    {
+      "path": "usr/local/lib/node_modules/n8n/node_modules/.pnpm/zod@3.25.76/node_modules/zod",
+      "beforeVersion": "3.25.76",
+      "beforePackageHash": "70eedbe34fd52385a4ae2f3e5759b19682189f0118ea73a6e7c32c677f61668e",
+      "name": "zod",
+      "replacement": "zod"
+    }
+  ],
+  "packageRoots": {
+    "@n8n/ai-utilities": {
+      "path": "usr/local/lib/node_modules/n8n/node_modules/.pnpm/@n8n+ai-utilities@file++++home+runner+_work+n8n+n8n+packages+@n8n+ai-utilities/node_modules/@n8n/ai-utilities",
+      "packageHash": "362b95b99f273d538128e905bbb64f15fbcf1bc087b8f7d09097cd55225defc2"
+    },
+    "@n8n/mcp-browser": {
+      "path": "usr/local/lib/node_modules/n8n/node_modules/.pnpm/@n8n+mcp-browser@file++++home+runner+_work+n8n+n8n+packages+@n8n+mcp-browser/node_modules/@n8n/mcp-browser",
+      "packageHash": "3d670f2a418fd3a8362df4b25cda70818ab957b46024b84d9e27087923ae92d9"
+    },
+    "@n8n/n8n-nodes-langchain": {
+      "path": "usr/local/lib/node_modules/n8n/node_modules/.pnpm/@n8n+n8n-nodes-langchain@file++++home+runner+_work+n8n+n8n+packages+@n8n+nodes-langchain/node_modules/@n8n/n8n-nodes-langchain",
+      "packageHash": "866b02d4ce7a962f425b2135566262ef4bebb72dbeb88d8383d24f7522de7ccc"
+    },
+    "n8n-editor-ui": {
+      "path": "usr/local/lib/node_modules/n8n/node_modules/.pnpm/n8n-editor-ui@file++++home+runner+_work+n8n+n8n+packages+frontend+editor-ui/node_modules/n8n-editor-ui",
+      "packageHash": "f83c870f96d6a1342b109704b6cb9e0c23d28f9778b149ca388b6510f68d2b6d"
+    },
+    "n8n": {
+      "path": "usr/local/lib/node_modules/n8n",
+      "packageHash": "bdb3ed72707f6f54b6e54ea1de565cd8657974e6d4fa19b890af58111f57bb7d"
+    }
+  }
+}

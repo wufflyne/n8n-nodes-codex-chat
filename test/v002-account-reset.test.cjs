@@ -161,7 +161,7 @@ test("Prepared activation requires a complete durable binding and cancellation b
     /cancelled/,
   );
   assert.equal(await c.store.exists(prepared.binding.profileId), false);
-  await c.manager.activatePreparedProfile(prepared, tokens(), "Prepared", {
+  await c.manager.activatePreparedProfile(prepared, tokens({ refreshToken: "SYNTHETIC_PREPARED_FAMILY" }), "Prepared", {
     bindingDurable: proof,
   });
   assert.equal((await c.store.read(prepared.binding)).state, "ready");
@@ -209,7 +209,7 @@ test("Cancellation while JWKS verification waits never reaches commit; cancellat
   };
   const result = await c.manager.activatePreparedProfile(
     next,
-    tokens(),
+    tokens({ refreshToken: "SYNTHETIC_COMMITTED_FAMILY" }),
     "Committed",
     { bindingDurable: nextProof, signal: after.signal },
   );
@@ -347,7 +347,7 @@ for (const code of [
     const second = await c.controller.consumeReset(c.binding, opts);
     assert.equal(second.action.reason, "cap_reached");
     const duplicate = await c.manager.importTokens(
-      tokens(),
+      tokens({ refreshToken: "SYNTHETIC_INDEPENDENT_FAMILY" }),
       "Duplicate same account",
     );
     const other = await c.controller.consumeReset(duplicate, {
@@ -415,8 +415,10 @@ test("Automatic off and missing acknowledgement cannot consume or fetch reset de
 });
 
 test("Durable execution reservation serializes competing account resets before either POST", async (t) => {
-  const c = await setup(t),
-    second = await c.manager.importTokens(tokens(), "Second profile");
+  // Keep quota low for both concurrent reads so the reservation is the reason
+  // the second request stops, regardless of filesystem scheduling.
+  const c = await setup(t, { consume: async () => Response.json({ code: "reset", windows_reset: 1 }) }),
+    second = await c.manager.importTokens(tokens({ refreshToken: "SYNTHETIC_SECOND_FAMILY" }), "Second profile");
   const options = {
     origin: "automatic",
     executionKey: key("competing-execution"),
@@ -588,6 +590,68 @@ test("Reconciliation occupies the current durable execution slot without minting
   );
   assert.deepEqual(c.bodies[1], c.bodies[0]);
 });
+
+for (const observedState of ["absent", "prepared"])
+  test(`Reconciliation cannot dispatch after its ${observedState} observation becomes uncertain without a reserved execution`, async (t) => {
+    const c = await setup(t, {
+      consume: async () => {
+        throw Error("Synthetic uncertain original action");
+      },
+    });
+    const initialOptions = {
+      origin: "automatic",
+      executionKey: key(`observation-original-${observedState}`),
+      policy,
+    };
+    let original, releaseOriginal;
+    if (observedState === "prepared") {
+      let entered;
+      const prepared = new Promise((resolve) => { entered = resolve; });
+      const resume = new Promise((resolve) => { releaseOriginal = resolve; });
+      const write = c.journal.writeLedger.bind(c.journal);
+      c.journal.writeLedger = async (value) => {
+        await write(value);
+        if (value.actions.some((action) => action.state === "prepared")) {
+          entered();
+          await resume;
+        }
+      };
+      original = c.controller.consumeReset(c.binding, initialOptions);
+      await prepared;
+    }
+    let entered, releaseObservation;
+    const observed = new Promise((resolve) => { entered = resolve; });
+    const resume = new Promise((resolve) => { releaseObservation = resolve; });
+    const ledger = c.journal.ledger.bind(c.journal);
+    let first = true;
+    c.journal.ledger = async (...args) => {
+      const value = await ledger(...args);
+      if (first) {
+        first = false;
+        entered();
+        await resume;
+      }
+      return value;
+    };
+    const executionKey = key(`observation-reconcile-${observedState}`);
+    const rejected = assert.rejects(
+      c.controller.resolvePendingReset(c.binding, { executionKey }),
+      /changed before reconciliation/,
+    );
+    await observed;
+    if (releaseOriginal) releaseOriginal();
+    else original = c.controller.consumeReset(c.binding, initialOptions);
+    assert.equal((await original).action.state, "uncertain");
+    c.advance(31000);
+    releaseObservation();
+    await rejected;
+    assert.equal(c.counters().consumes, 1);
+    assert.equal(await c.journal.reservation(executionKey), undefined);
+    const action = (await ledger(c.journal.scope(identity()))).actions[0];
+    assert.equal(action.state, "uncertain");
+    assert.equal(action.dispatchCount, 1);
+    assert.deepEqual(action.attemptExecutions, [initialOptions.executionKey]);
+  });
 
 test("Orphan recovery durably invalidates a paused original writer before releasing its execution reservation", async (t) => {
   const c = await setup(t),

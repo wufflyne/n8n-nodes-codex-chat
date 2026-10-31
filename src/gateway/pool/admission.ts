@@ -1,12 +1,37 @@
 import { WireError } from "../errors.js";
 
+/** One application's body and model waiters share its configured pending limit. */
+export class PendingAdmissionBudget {
+  private pending = 0;
+  constructor(
+    readonly maximum: number,
+    readonly waitMs: number,
+  ) {}
+  tryAcquire(): (() => void) | undefined {
+    if (this.pending >= this.maximum) return;
+    this.pending++;
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      this.pending--;
+    };
+  }
+  get count() {
+    return this.pending;
+  }
+}
+
 export class AdmissionQueue {
   private active = 0;
   private readonly accounts = new Map<string, number>();
   private readonly branches = new Set<string>();
   private readonly waiting = new Set<() => void>();
   private draining = false;
-  constructor(readonly limits = { active: 8, account: 2, queued: 64, waitMs: 10000 }) {}
+  readonly pending: PendingAdmissionBudget;
+  constructor(readonly limits = { active: 8, account: 2, queued: 64, waitMs: 10000 }) {
+    this.pending = new PendingAdmissionBudget(limits.queued, limits.waitMs);
+  }
   async acquire(account: string, branch: string | null, signal?: AbortSignal): Promise<() => void> {
     const deadline = Date.now() + this.limits.waitMs;
     while (true) {
@@ -34,23 +59,31 @@ export class AdmissionQueue {
           for (const wake of this.waiting) wake();
         };
       }
-      if (this.waiting.size >= this.limits.queued || Date.now() >= deadline)
+      const releasePending =
+        this.waiting.size < this.limits.queued && Date.now() < deadline
+          ? this.pending.tryAcquire()
+          : undefined;
+      if (!releasePending)
         throw new WireError(
           429,
           "queue_full",
           "The admission queue is full or its wait deadline expired; no request was admitted.",
         );
       await new Promise<void>((resolve, reject) => {
-        const wake = () => {
+        let settled = false;
+        const finish = (error?: WireError) => {
+          if (settled) return;
+          settled = true;
           clearTimeout(timer);
           signal?.removeEventListener("abort", abort);
           this.waiting.delete(wake);
-          resolve();
+          releasePending();
+          if (error) reject(error);
+          else resolve();
         };
+        const wake = () => finish();
         const abort = () => {
-          clearTimeout(timer);
-          this.waiting.delete(wake);
-          reject(new WireError(422, "cancelled", "The request was cancelled before admission."));
+          finish(new WireError(422, "cancelled", "The request was cancelled before admission."));
         };
         const timer = setTimeout(wake, Math.max(0, deadline - Date.now()));
         this.waiting.add(wake);

@@ -76,6 +76,7 @@ async function runRelease(directory, environment = {}, initialImages = []) {
     return child;
   }
   function customRequire(specifier) {
+    if (specifier === "./prepared-security.cjs") return { preparedSecurity: () => ({ directory: path.join(directory, "prepared-security"), manifestSha256: "c".repeat(64) }) };
     if (specifier === "node:child_process") return { spawnSync };
     if (specifier === "../package.json") return meta;
     if (specifier === "../compatibility.json") return {};

@@ -45,7 +45,7 @@ export function serviceModel(
       let admitted = false;
       for await (const event of service.generate(
         binding,
-        { request, settings, lite, context: config.context, affinity: context.affinity },
+        { request, settings, lite, context: config.context, affinity: context.affinity, outputContract: context.outputContract },
         active.length ? AbortSignal.any(active) : undefined,
         async () => {
           admitted = true;

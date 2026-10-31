@@ -12,7 +12,7 @@ fs.writeFileSync(
   "dist/integration/context-build.json",
   JSON.stringify({
     protocolVersion: 1,
-    release: "0.0.5",
+    release: "0.1.0",
     n8nVersion: "2.45.6",
     agentsVersion: "0.30.5",
     artifact,

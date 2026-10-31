@@ -13,10 +13,12 @@ import path from "node:path";
 import { CodexError, assert, record } from "../core/errors.js";
 import { delay } from "../core/http.js";
 import { PROVIDER, type Profile } from "../core/types.js";
+import { RotationStore } from "./rotation-store.js";
 
 export function bindingHash(secret: string): string {
   return createHash("sha256").update(secret).digest("hex");
 }
+export const PROFILE_MAX_BYTES = 512 * 1024;
 export function profileId(value: string): string {
   assert(
     /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(value),
@@ -27,17 +29,19 @@ export function profileId(value: string): string {
 
 /** One encrypted record contains both rotating tokens. Locks fail closed and are never stolen. */
 export class ProfileStore {
+  readonly rotation: RotationStore;
   private readonly key: Buffer;
   private readonly reads = new Map<string, Promise<Profile>>();
   constructor(
     readonly directory: string,
     key: Buffer,
     private readonly ensureOwner?: () => Promise<void>,
-    private readonly readOnly = false,
+    readonly readOnly = false,
   ) {
     assert(path.isAbsolute(directory), "N8N_CODEX_STORE_DIR must be an absolute path.");
     assert(key.length === 32, "N8N_CODEX_STORE_KEY must be a base64-encoded 32-byte key.");
     this.key = Buffer.from(key);
+    this.rotation = new RotationStore(this, key);
   }
 
   private async prepare(): Promise<void> {
@@ -143,6 +147,7 @@ export class ProfileStore {
     profile = structuredClone(profile);
     this.reads.delete(profile.id);
     validateProfile(profile);
+    assert(Buffer.byteLength(JSON.stringify(profile)) <= PROFILE_MAX_BYTES, "The account profile exceeds its bounded storage format.");
     await this.prepare();
     const iv = randomBytes(12);
     const cipher = createCipheriv("aes-256-gcm", this.key, iv);

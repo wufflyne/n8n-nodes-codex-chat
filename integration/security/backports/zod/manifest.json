@@ -1,0 +1,31 @@
+{
+  "upstreamCommit": "540f40974ff131ab96130b8fcc29af14bb750395",
+  "pullRequest": "https://github.com/colinhacks/zod/pull/6699",
+  "packageVersion": "3.25.76",
+  "files": {
+    "v3/types.ts": {
+      "before": "70309a0877c35d036842e291fe7c8a4439d5db49411d233f8a22bf8a59c41419",
+      "after": "d85808e2139a49e2c4ca7c277fbfa63362dc5f5e4620797f14c710a1afb9116e",
+      "runtime": {
+        "js": "9763a2938f0e7f983363ef4bf6530e7583e3f2d54f8a4a6684efad58febc6e8e",
+        "cjs": "06487cc05ed45c5dd29789bf0aa75734d1ce06592a7f2665ba4ca90a68e8a3e1"
+      }
+    },
+    "v4/core/regexes.ts": {
+      "before": "3d98827a5f73f4d748163a04860668fa321ce5bdfa5b0616d621af994e98f3ed",
+      "after": "90ec34fa5126780af20e357e774181fea60452c767a451dd3966478c8fe1075a",
+      "runtime": {
+        "js": "89c429d4e4c24a4e3127209dbc85cba96c220e9fcfafcdf5a8d877b4d32bd796",
+        "cjs": "41d5ac4aff6305bf1e8cc6d7a8f504ccbd31d97e2f86147742b00ad5de89e445"
+      }
+    },
+    "v4/core/schemas.ts": {
+      "before": "5910d2a181b6570189730578df0ff7c90bd7b2cda6ae1064026d236a47fb687d",
+      "after": "de91688b5c597307fd90cbe5dcd09d833fa7a468f25aa4159a6e967f74420f3b",
+      "runtime": {
+        "js": "d466582c022b08a3f9eb1a65d5970d8ca25064d73a5a838d76414ae36440a76b",
+        "cjs": "f5d17a7db487c943c9d07cc624010ebb6d93683eabd14339846f4912cc88b51f"
+      }
+    }
+  }
+}

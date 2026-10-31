@@ -28,7 +28,10 @@ for (const name of [
   "compose.gateway.example.yaml",
 ])
   if (fs.existsSync(path.join(source, name)))
-    fs.cpSync(path.join(source, name), path.join(work, name), { recursive: true });
+    fs.cpSync(path.join(source, name), path.join(work, name), {
+      recursive: true,
+      filter: (entry) => path.basename(entry) !== "node_modules" && path.basename(entry) !== ".test-state",
+    });
 const env = {
   ...process.env,
   npm_config_cache: "/npm-cache",
@@ -49,6 +52,17 @@ run(
 run("npm", ["run", "build"]);
 run("npm", ["test"]);
 run("node", ["integration/scripts/build-overlay.cjs", "/upstream", path.join(output, "overlay")]);
+run("npm", ["ci", "--ignore-scripts", "--no-audit", "--no-fund"], path.join(work, "integration/security"));
+const securityOutput = path.join(output, "security");
+run("node", ["integration/security/build-security.cjs", "/upstream", securityOutput]);
+run("node", ["integration/security/prepare-os.cjs", path.join(securityOutput, "os")]);
+env.CODEX_WIRE_SECURITY_BUILD = securityOutput;
+env.CODEX_WIRE_UPSTREAM_SOURCE = "/upstream";
+env.CODEX_WIRE_ORIGINAL_SMARTQUOTES = path.join(work, "integration/security/node_modules/markdown-it/lib/rules_core/smartquotes.js");
+env.CODEX_WIRE_ORIGINAL_MARKDOWN = path.join(work, "integration/security/node_modules/markdown-it/lib");
+env.CODEX_WIRE_OS_INPUT_DIR = path.join(securityOutput, "os/apks");
+run("node", ["--test", "integration/security/security.test.cjs"]);
+run("node", ["--test", "integration/security/os.test.cjs"]);
 fs.mkdirSync(path.join(output, "artifacts"));
 run("npm", ["pack", "--ignore-scripts", "--pack-destination", path.join(output, "artifacts")]);
 const installSeed = path.join(output, "install-seed");
@@ -67,6 +81,7 @@ run(
     "--no-fund",
     "--bin-links=false",
     "--install-strategy=shallow",
+    "--logs-max=0",
     "--cache",
     path.join(output, "install-cache"),
   ],

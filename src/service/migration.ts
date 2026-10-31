@@ -18,7 +18,7 @@ async function manifest(
     sha256: string | null;
   }> = [];
   for (const name of (await readdir(path.join(directory, prefix))).sort()) {
-    if (!prefix && name === ".codex-wire-owner") continue;
+    if (!prefix && name === ".codex-wire-owner-v2") continue;
     const relative = path.join(prefix, name),
       file = path.join(directory, relative),
       stat = await lstat(file);

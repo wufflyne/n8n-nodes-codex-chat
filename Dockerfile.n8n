@@ -15,6 +15,9 @@ FROM docker.io/n8nio/n8n:2.45.6@sha256:45edf89655fd66dd55ea9336c1791ad14777599fd
 USER root
 WORKDIR /opt/n8n-codex
 COPY --from=dependencies /opt/n8n-codex/node_modules ./node_modules
+COPY --from=package /build/security/ /opt/codex-wire-security/
+RUN CODEX_WIRE_IMAGE_BUILD=1 node /opt/codex-wire-security/tools/install-os.cjs /opt/codex-wire-security/os
+RUN CODEX_WIRE_IMAGE_BUILD=1 node /opt/codex-wire-security/tools/install-security.cjs / /opt/codex-wire-security
 ENV N8N_CUSTOM_EXTENSIONS=/opt/n8n-codex/node_modules/n8n-nodes-codex-chat/dist
 RUN mkdir -p /var/lib/n8n-codex/profiles /var/lib/n8n-codex/bindings && chown -R node:node /var/lib/n8n-codex && chmod 0700 /var/lib/n8n-codex /var/lib/n8n-codex/profiles /var/lib/n8n-codex/bindings
 USER node

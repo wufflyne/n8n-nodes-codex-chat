@@ -1,7 +1,9 @@
 import { createHash } from "node:crypto";
-import { assert } from "../core/errors.js";
+import { assert, checkKeys, record } from "../core/errors.js";
 import type { AccountSnapshot, RecoveryPolicy } from "./types.js";
 export function validateRecovery(policy: RecoveryPolicy) {
+  const value = record(policy);
+  checkKeys(value, ["automatic", "threshold", "maxPer24Hours", "order"]);
   assert(
     typeof policy.automatic === "boolean" &&
       Number.isFinite(policy.threshold) &&
@@ -13,6 +15,42 @@ export function validateRecovery(policy: RecoveryPolicy) {
       ["next-first", "reset-first"].includes(policy.order),
     "The account recovery policy is invalid.",
   );
+}
+
+export interface ResetOptions {
+  origin: "manual" | "automatic";
+  executionKey: string;
+  policy: RecoveryPolicy;
+  selectedCreditId?: string;
+  acknowledgement?: boolean;
+  signal?: AbortSignal;
+}
+/** Pure validation: call before any account, admission or operation access. */
+export function validateResetOptions(value: unknown, allowSignal = false): ResetOptions {
+  const options = record(value);
+  checkKeys(options, ["origin", "executionKey", "policy", "selectedCreditId", "acknowledgement", ...(allowSignal ? ["signal"] : [])]);
+  assert(options.origin === "manual" || options.origin === "automatic", "Choose a manual or automatic reset origin.");
+  validateExecutionKey(options.executionKey);
+  validateRecovery(options.policy as RecoveryPolicy);
+  assert(options.acknowledgement === undefined || typeof options.acknowledgement === "boolean", "Reset acknowledgement must be a boolean.");
+  if (options.origin === "manual") {
+    assert(options.acknowledgement === true, "Allow this step to use one earned reset credit before executing it.");
+    assert(typeof options.selectedCreditId === "string" && /^[^\x00-\x20\x7f]{1,256}$/.test(options.selectedCreditId), "Select one eligible reset allocation before executing this manual action.");
+  } else {
+    assert(options.selectedCreditId === undefined && options.acknowledgement === undefined, "Automatic resets cannot include manual allocation or acknowledgement options.");
+  }
+  assert(options.signal === undefined || options.signal instanceof AbortSignal, "The reset cancellation signal is invalid.");
+  return { ...options, policy: { ...(options.policy as RecoveryPolicy) } } as unknown as ResetOptions;
+}
+function validateExecutionKey(value: unknown): asserts value is string {
+  assert(typeof value === "string" && /^[a-f0-9]{64}$/.test(value), "A public workflow execution identity is required for reset coordination.");
+}
+export function validateReconcileOptions(value: unknown, allowSignal = false): { executionKey: string; signal?: AbortSignal } {
+  const options = record(value);
+  checkKeys(options, ["executionKey", ...(allowSignal ? ["signal"] : [])]);
+  validateExecutionKey(options.executionKey);
+  assert(options.signal === undefined || options.signal instanceof AbortSignal, "The reconciliation cancellation signal is invalid.");
+  return { ...options } as { executionKey: string; signal?: AbortSignal };
 }
 export function lowAllowance(
   snapshot: AccountSnapshot,

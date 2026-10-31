@@ -1,7 +1,7 @@
 import { isDeepStrictEqual } from "node:util";
 import { normalizeImage, type ImageBudget } from "../image/validation.js";
-import { validateSettings } from "../core/catalog.js";
-import { assert, record, string } from "../core/errors.js";
+import { validateSettings, validateReliability } from "../core/catalog.js";
+import { assert, checkKeys, record, string } from "../core/errors.js";
 import type {
   ModelInfo,
   ModelSettings,
@@ -14,6 +14,8 @@ import {
   validator,
   type StructuredFormat,
 } from "./structured.js";
+
+import { validateReasoning } from "./completion.js";
 
 export interface CanonicalGeneration {
   model: string;
@@ -71,6 +73,7 @@ export function validateHistory(
             "Message text must be a string.",
           );
           return {
+            ...block,
             type: assistant ? "output_text" : "input_text",
             text: block.text,
           };
@@ -111,15 +114,7 @@ export function validateHistory(
         item.namespace = "functions";
       }
     } else if (item.type === "reasoning") {
-      assert(
-        typeof item.encrypted_content === "string" &&
-          item.encrypted_content.length > 0,
-        "Reasoning replay requires encrypted content.",
-      );
-      assert(
-        Array.isArray(item.summary),
-        "Reasoning summary must be an array, including when empty.",
-      );
+      validateReasoning(item);
     } else assert(false, "Unsupported replay item.");
     return item;
   });
@@ -223,117 +218,87 @@ export function sameCanonicalItem(a: ResponseItem, b: ResponseItem): boolean {
   return isDeepStrictEqual(normalize(a), normalize(b));
 }
 
-/** Native RPC accepts the existing codec contract, never arbitrary provider options. */
-export function validateNativeRequest(
-  request: ResponseRequest,
-  settings: ModelSettings,
-  model: ModelInfo,
-): void {
-  const allowed = [
-    "model",
-    "stream",
-    "store",
-    "input",
-    "include",
-    "tool_choice",
-    "parallel_tool_calls",
-    "tools",
-    "reasoning",
-    "text",
-    "service_tier",
-    "prompt_cache_key",
-  ];
-  assert(
-    Object.keys(request).every((key) => allowed.includes(key)),
-    "Unsupported native request field.",
-  );
-  assert(
-    request.prompt_cache_key === undefined ||
-      (typeof request.prompt_cache_key === "string" &&
-        /^[A-Za-z0-9_-]{1,256}$/.test(request.prompt_cache_key)),
-    "Invalid native prompt affinity.",
-  );
-  assert(
-    request.store === false &&
-      request.stream === true &&
-      request.model === model.slug &&
-      request.tool_choice === "auto",
-    "Invalid native request contract.",
-  );
-  assert(
-    Array.isArray(request.include) &&
-      request.include.every((value) => value === "reasoning.encrypted_content"),
-    "Unsupported native include.",
-  );
-  assert(Array.isArray(request.input), "Native input must be an array.");
-  let tools = request.tools ?? [];
-  const namespaces = request.input.filter(
-    (item) => item.type === "additional_tools",
-  );
-  assert(
-    namespaces.length < 2 && (!namespaces.length || model.useResponsesLite),
-    "Unexpected native tool namespace.",
-  );
-  if (namespaces.length) {
-    const item = namespaces[0]!,
-      groups = item.tools;
-    assert(
-      Object.keys(item).every((key) =>
-        ["type", "role", "tools"].includes(key),
-      ) &&
-        item.role === "developer" &&
-        Array.isArray(groups) &&
-        groups.length === 1,
-      "Invalid native tool namespace.",
-    );
-    const group = record(groups[0]);
-    assert(
-      group.type === "namespace" &&
-        group.name === "functions" &&
-        Array.isArray(group.tools),
-      "Invalid native functions namespace.",
-    );
-    tools = group.tools as ProviderTool[];
+/** Cheap checks must precede session acquisition; capability checks follow model resolution. */
+export function validateNativeShape(requestValue: unknown, settingsValue: unknown, lite: unknown): void {
+  const request = record(requestValue), settings = record(settingsValue);
+  checkKeys(request, ["model", "stream", "store", "input", "include", "tool_choice", "parallel_tool_calls", "tools", "reasoning", "text", "service_tier", "prompt_cache_key"]);
+  checkKeys(settings, ["reasoningEffort", "reasoningSummary", "verbosity", "serviceTier", "parallelToolCalls", "timeoutMs", "idleTimeoutMs", "maxRetries"]);
+  validateReliability(settings as unknown as ModelSettings);
+  for (const key of ["reasoningEffort", "reasoningSummary", "verbosity", "serviceTier"])
+    assert(settings[key] === undefined || (typeof settings[key] === "string" && (settings[key] as string).length > 0 && (settings[key] as string).length <= 200), "Native settings contain an invalid value.");
+  assert(typeof lite === "boolean" && request.stream === true && request.store === false && request.tool_choice === "auto", "Invalid native privacy, stream or tool selection contract.");
+  string(request.model, "Native model", 200);
+  assert(Array.isArray(request.input) && Array.isArray(request.include) && request.include.length === 1 && request.include[0] === "reasoning.encrypted_content", "Native input and encrypted reasoning include are required.");
+  assert(typeof request.parallel_tool_calls === "boolean", "Native parallel-call setting is required.");
+  assert(request.prompt_cache_key === undefined || (typeof request.prompt_cache_key === "string" && /^[A-Za-z0-9_-]{1,256}$/.test(request.prompt_cache_key)), "Invalid native prompt affinity.");
+  assert(request.service_tier === undefined || typeof request.service_tier === "string", "Invalid native service tier.");
+  if (request.reasoning !== undefined) {
+    const reasoning = record(request.reasoning); checkKeys(reasoning, ["context", "effort", "summary"]);
+    for (const value of Object.values(reasoning)) assert(value === undefined || typeof value === "string", "Invalid native reasoning setting.");
   }
-  canonicalRequest(
-    {
-      model: model.slug,
-      input: request.input.filter((item) => item.type !== "additional_tools"),
-      tools,
-      settings,
-      format: request.text?.format as StructuredFormat | undefined,
-    },
-    model,
-    false,
-  );
-  assert(
-    request.parallel_tool_calls ===
-      (model.useResponsesLite ? false : (settings.parallelToolCalls ?? true)),
-    "Native parallel-call settings do not match.",
-  );
-  if (request.reasoning) {
-    const r = record(request.reasoning);
-    assert(
-      Object.keys(r).every((key) =>
-        ["context", "effort", "summary"].includes(key),
-      ) &&
-        r.effort === settings.reasoningEffort &&
-        r.summary === settings.reasoningSummary &&
-        (model.useResponsesLite
-          ? r.context === "all_turns"
-          : r.context === undefined),
-      "Native reasoning settings do not match.",
-    );
+  if (request.text !== undefined) {
+    const text = record(request.text); checkKeys(text, ["verbosity", "format"]);
+    assert(text.verbosity === undefined || typeof text.verbosity === "string", "Invalid native text setting.");
+    if (text.format !== undefined) validatedOutputFormat(text.format as StructuredFormat);
   }
-  if (request.text)
-    assert(
-      Object.keys(request.text).every((key) =>
-        ["verbosity", "format"].includes(key),
-      ) && request.text.verbosity === settings.verbosity,
-      "Native text settings do not match.",
-    );
-  assert(
-    request.service_tier === settings.serviceTier,
-    "Native service tier does not match.",
-  );
+  const tools = (value: unknown) => {
+    assert(Array.isArray(value), "Native tools must be an array.");
+    for (const raw of value) {
+      const tool = record(raw); checkKeys(tool, ["type", "name", "description", "parameters", "strict"]);
+      assert(tool.type === "function" && typeof tool.name === "string" && /^[A-Za-z0-9_-]{1,64}$/.test(tool.name) && (tool.description === undefined || typeof tool.description === "string") && (tool.strict === undefined || typeof tool.strict === "boolean"), "Invalid native function tool.");
+      record(tool.parameters);
+    }
+  };
+  if (request.tools !== undefined) tools(request.tools);
+  for (const raw of request.input) {
+    const item = record(raw);
+    if (item.type === "additional_tools") {
+      checkKeys(item, ["type", "role", "tools"]);
+      assert(item.role === "developer" && Array.isArray(item.tools) && item.tools.length === 1, "Invalid native tool namespace.");
+      const group = record(item.tools[0]); checkKeys(group, ["type", "name", "description", "tools"]);
+      assert(group.type === "namespace" && group.name === "functions" && group.description === "", "Invalid native functions namespace.");
+      tools(group.tools);
+    }
+  }
+  assert(Buffer.byteLength(JSON.stringify(request)) <= 32 * 1024 * 1024, "The request exceeds 32 MiB.");
+}
+
+/** Normalize only documented equivalences in a comparison projection; forward the original request. */
+export function validateNativeRequest(request: ResponseRequest, settings: ModelSettings, model: ModelInfo): void {
+  validateNativeShape(request, settings, model.useResponsesLite);
+  const namespaces = request.input.filter((item) => item.type === "additional_tools");
+  assert(namespaces.length <= 1 && (!namespaces.length || model.useResponsesLite), "Unexpected native tool namespace.");
+  assert(!model.useResponsesLite || request.tools === undefined, "Responses Lite cannot include ignored Standard tools.");
+  const tools = namespaces.length
+    ? record((namespaces[0]!.tools as unknown[])[0]).tools as ProviderTool[]
+    : request.tools ?? [];
+  const input = request.input.filter((item) => item.type !== "additional_tools");
+  const canonical = canonicalRequest({ model: request.model, input, tools, settings, format: request.text?.format as StructuredFormat | undefined }, model, false);
+  if (request.prompt_cache_key !== undefined) canonical.prompt_cache_key = request.prompt_cache_key;
+  const projection = (value: ResponseRequest) => {
+    const copy = JSON.parse(JSON.stringify(value)) as ResponseRequest;
+    const callNames = new Map<string, unknown>();
+    copy.input = copy.input.map((raw) => {
+      const item = { ...raw };
+      if (!item.type || item.type === "message") {
+        item.type = "message";
+        if (typeof item.content === "string") item.content = [{ type: item.role === "assistant" ? "output_text" : "input_text", text: item.content }];
+        if (Array.isArray(item.content)) item.content = item.content.map((rawBlock) => {
+          const block = record(rawBlock);
+          return ["text", "input_text", "output_text"].includes(String(block.type)) ? { ...block, type: item.role === "assistant" ? "output_text" : "input_text" } : block;
+        });
+      }
+      if (item.type === "function_call") {
+        callNames.set(String(item.call_id), item.name);
+        if (model.useResponsesLite && item.namespace === undefined) item.namespace = "functions";
+      }
+      if (model.useResponsesLite && item.type === "function_call_output") {
+        if (item.name === undefined) item.name = callNames.get(String(item.call_id));
+        if (item.namespace === undefined) item.namespace = "functions";
+      }
+      return item;
+    });
+    return copy;
+  };
+  assert(isDeepStrictEqual(projection(request), projection(canonical)), "Native request fields do not match the declared settings and codec. No request was rewritten or sent.");
 }

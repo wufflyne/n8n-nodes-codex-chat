@@ -69,7 +69,7 @@ test('Failed import, identity mismatch and unrelated account profiles remain iso
   }, refresh: async () => tokens() };
   const { store, manager } = await context(t, auth);
   const first = await manager.importTokens(tokens(), 'First');
-  const second = await manager.importTokens(tokens({ accessToken: 'OTHER_SYNTHETIC' }), 'Second');
+  const second = await manager.importTokens(tokens({ accessToken: 'OTHER_SYNTHETIC', refreshToken: 'OTHER_INDEPENDENT_SYNTHETIC_REFRESH' }), 'Second');
   const before = await store.read(first);
   await assert.rejects(manager.importTokens(tokens({ accessToken: 'MALFORMED_SYNTHETIC' }), 'Failed', first), /validation/);
   await assert.rejects(manager.importTokens(tokens({ accessToken: 'OTHER_SYNTHETIC' }), 'Wrong identity', first), /different account/);
@@ -124,8 +124,11 @@ test('Remote rotation followed by persistence failure cannot replay the previous
   store.write = async value => { if (value.generation > 1) throw new CodexError('storage', 'Synthetic persistence failure'); return originalWrite(value); };
   await assert.rejects(manager.session(binding), /persistence failure/);
   assert.equal((await store.read(binding)).state, 'refresh_uncertain');
-  await assert.rejects(manager.session(binding), /previous token renewal/);
+  await assert.rejects(manager.session(binding), /persistence failure/);
   assert.equal(count, 1);
+  store.write = originalWrite;
+  await manager.session(binding);
+  assert.equal(count, 1, 'Captured verified success recovers locally without a second POST');
 });
 
 test('Manual import is provider-scoped and cannot bootstrap from a refresh token alone', () => {

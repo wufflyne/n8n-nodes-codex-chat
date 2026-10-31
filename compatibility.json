@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "packageVersion": "0.0.5",
-  "status": "synthetic qualification on the pinned stack; live account behavior unqualified",
+  "packageVersion": "0.1.0",
+  "status": "0.1.0 release contract; exact artifact acceptance and live scope are recorded in the release receipt",
   "protocol": {
     "clientVersion": "0.166.0",
     "commit": "55c099a142eb302188fee00ab9e9062f2db1c359"
@@ -35,7 +35,7 @@
   "liveAccountVerified": false,
   "baselineEvidence": {
     "packageVersion": "0.0.4",
-    "scope": "Historical published baseline only; these physical/live results do not qualify changed 0.0.5 bytes.",
+    "scope": "Historical published baseline only; these physical/live results do not qualify changed 0.1.0 bytes.",
     "verificationSummary": {
       "automatedTests": 186,
       "nativeDistinctCases": 162,
@@ -63,7 +63,7 @@
     "webhook": 2.2,
     "respondToWebhook": 1.5
   },
-  "nativeNodeVersionsScope": "Actual pinned n8n workflows and installed community package exercised with synthetic provider sockets; exact artifact receipts accompany the local distribution.",
+  "nativeNodeVersionsScope": "Pinned node versions exercised in installed synthetic qualification. Live entitlement and public-registry installation are reported separately.",
   "capabilities": [
     {
       "id": "native_chat_tools",
@@ -74,7 +74,7 @@
         "live": false
       },
       "sourceSupported": true,
-      "reason": "Actual native Standard/Lite Agent tool loops, Code/HTTP/Workflow tools and strict host peer identity."
+      "reason": "Installed embedded and remote workflows exercise both supported codecs, native tools and streaming with controlled providers."
     },
     {
       "id": "account_visibility",
@@ -85,7 +85,7 @@
         "live": false
       },
       "sourceSupported": true,
-      "reason": "Actual native local status/models/limits/reset allocations/credits with explicit source and unknown coverage."
+      "reason": "Installed account nodes exercise local status, authenticated synthetic models and quota reads; real entitlement is not inferred."
     },
     {
       "id": "fresh_account_router",
@@ -96,7 +96,7 @@
         "live": false
       },
       "sourceSupported": true,
-      "reason": "Actual ordered native Router [A,B,B], fresh quota fallback and sticky admitted continuation."
+      "reason": "Installed native Router exercises ordered fresh admission and pinned tool turns; it is distinct from the gateway 32-profile pool."
     },
     {
       "id": "earned_resets",
@@ -107,7 +107,7 @@
         "live": false
       },
       "sourceSupported": true,
-      "reason": "Synthetic native consent/caps and durable unknown-effect/reconciliation fences; no live consume."
+      "reason": "Installed native/control paths exercise consent, bounds, uncertainty and reconciliation with synthetic providers only; no real spending is claimed."
     },
     {
       "id": "structured_output",
@@ -118,7 +118,7 @@
         "live": false
       },
       "sourceSupported": true,
-      "reason": "Actual native parser, chain, extractor/classifier and local schema/argument validation before tool publication."
+      "reason": "Installed chains, extraction, classification and parser repair exercise owned structured output on both codecs; repair calls are host-owned."
     },
     {
       "id": "photo_input",
@@ -129,7 +129,7 @@
         "live": false
       },
       "sourceSupported": true,
-      "reason": "Actual supported raster socket/native input and bounded concurrent near-limit payloads; oversized input rejected."
+      "reason": "Installed native and standalone paths exercise supported image inputs with controlled providers; header/signature checks are not a complete image decoder."
     },
     {
       "id": "image_generation",
@@ -140,7 +140,7 @@
         "live": false
       },
       "sourceSupported": true,
-      "reason": "Actual native synthetic PNG binary delivery through workflow tools; live generation/quality unqualified."
+      "reason": "Installed native image action validates inputs and delivers exact synthetic image bytes. Real image-generation entitlement remains unverified."
     },
     {
       "id": "prompt_affinity_usage",
@@ -151,7 +151,7 @@
         "live": false
       },
       "sourceSupported": true,
-      "reason": "Exact canonical synthetic comparisons and separate native affinity scope; no measured live cache savings."
+      "reason": "Installed requests retain affinity and report observed synthetic usage. Cache hits, quota savings and quality equivalence are not inferred."
     },
     {
       "id": "execution_usage",
@@ -162,7 +162,7 @@
         "live": false
       },
       "sourceSupported": true,
-      "reason": "Actual native per-execution reported usage and coverage; missing fields remain unknown."
+      "reason": "Installed workflow execution reports are checked against actual controlled-provider calls and retained field coverage."
     },
     {
       "id": "simple_memory_selection",
@@ -173,7 +173,7 @@
         "live": false
       },
       "sourceSupported": true,
-      "reason": "Actual native memory/model selector and standalone supplied-history truncation without hidden restoration."
+      "reason": "Installed memory preserves retained tool-group metadata and complete visible replay. Stock Simple Memory does not retain final assistant provider metadata."
     },
     {
       "id": "queue_multiworker",
@@ -239,7 +239,7 @@
         "live": false
       },
       "sourceSupported": true,
-      "reason": "Bounded Responses, encrypted canonical items, exact models, incremental text and committed tool delivery. Synthetic physical installed-server/socket tests are qualified; live behavior is not."
+      "reason": "Installed standalone Agents exercise both codecs with stored/stateless and streamed/nonstreamed paths against controlled providers."
     },
     {
       "id": "full_account_pool",
@@ -250,7 +250,7 @@
         "live": false
       },
       "sourceSupported": true,
-      "reason": "Authenticated ModelRequestContext v1, durable operations, pre-admission fallback and branch pins. Synthetic physical installed-server/socket tests are qualified; live behavior is not."
+      "reason": "Installed gateway qualification exercises all32 ordered candidates, capability/quota boundaries and persistent admission pins with controlled accounts."
     },
     {
       "id": "account_console",
@@ -261,7 +261,7 @@
         "live": false
       },
       "sourceSupported": true,
-      "reason": "Protected four-view onboarding, account visibility, scoped one-time keys and retention controls. Synthetic physical installed-server/socket tests are qualified; live behavior is not."
+      "reason": "Actual protected console/browser and HTTP checks exercise onboarding, ordered policies, authentication and bounded synthetic device lifecycle."
     },
     {
       "id": "typed_native_rpc",
@@ -272,19 +272,51 @@
         "live": false
       },
       "sourceSupported": true,
-      "reason": "All four native nodes use the versioned service boundary in gateway mode. Synthetic physical installed-server/socket tests are qualified; live behavior is not."
+      "reason": "Actual installed embedded/remote native paths exercise request validation, instance scope and both supported codecs."
     }
   ],
   "limitations": [
     "Only known subscription codecs are supported; new catalog slugs do not imply unknown protocol or modality support.",
     "Full pool requires the matched authenticated server lifecycle hook; stock n8n alone supports a fixed-account connection.",
     "Assistant Chat Completions, direct PDF/audio/video, hosted provider tools, image editing, queue/multiworker and purchasing are unsupported.",
-    "Live device consent, rotating renewal, multiple real accounts, image generation, reset spending, cache savings and model-quality equivalence are unqualified for 0.0.5.",
+    "Live device consent, rotating renewal, multiple real accounts, image generation, reset spending, cache savings and model-quality equivalence are unqualified for 0.1.0.",
     "Encrypted local continuity defaults to 30 days idle / 90 days absolute; store:false does not retain prompt or response bodies.",
     "Legacy native workflow crash replay is unsupported; native unknown/duplicate outcomes fail closed.",
-    "The full upstream monorepo is not qualified clean: pinned NodeNext differential is six baseline/six patched/zero introduced diagnostics.",
     "Stock standalone Agents has no user fork/regenerate endpoint in this pinned runtime; the integration does not add one.",
-    "Synthetic episodic memory uses a separately configured embedding backend; Codex Wire embeddings remain unsupported."
+    "Synthetic episodic memory uses a separately configured embedding backend; Codex Wire embeddings remain unsupported.",
+    "Agents source differential retains the six known baseline diagnostics. Expanded lifecycle/security source and dependency differentials are recorded separately; no full upstream clean typecheck is claimed.",
+    "Pinned Agent V3 Code Tool may add call metadata such as toolCallId; a strict manual schema can reject those additional fields. Check tool results and declare the intended schema explicitly.",
+    "Stock Simple Memory retains restored tool-group metadata but constructs final assistant messages from visible strings without provider metadata; missing final opaque reasoning is not reconstructed."
   ],
-  "qualificationGuide": "docs/qualification.md"
+  "qualificationGuide": "docs/qualification.md",
+  "nativeMetadata": {
+    "version": 2,
+    "scope": [
+      "verified account affinity",
+      "exact model",
+      "known codec"
+    ],
+    "legacyPolicy": "Preserve or export older memory; start a deliberate new session. Version 1 opaque metadata is never guessed or replayed."
+  },
+  "tokenStore": {
+    "profileEnvelopeVersion": 1,
+    "journalVersion": 2,
+    "oldBinaryDowngrade": "unsupported; exact v0.0.5 owner mechanically refused, older/custom lock-ignoring clients require key/store access revocation",
+    "records": 65536,
+    "unresolvedCaptures": 128,
+    "aggregatePayloadBytes": 67108864,
+    "successResponseBytes": 262144
+  },
+  "securityLayer": {
+    "base": "2.45.6",
+    "sdk": "1.32.0",
+    "server": "2.3.0",
+    "core": "2.3.0",
+    "node": "2.1.0",
+    "sharedZod": "3.25.76 with pinned compatible upstream backport",
+    "bodyBytes": 1048576,
+    "toolInputElements": 10000,
+    "manifest": "integration/security/image-manifest.json",
+    "osManifest": "integration/security/os/manifest.json"
+  }
 }

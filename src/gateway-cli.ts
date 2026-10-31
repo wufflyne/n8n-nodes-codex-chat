@@ -22,7 +22,7 @@ export async function main(args = process.argv.slice(2)) {
   });
   if (values.help || !positionals.length) {
     process.stdout.write(
-      "Codex Wire gateway 0.0.5\n\n  codex-wire-gateway doctor --config <protected-config.json>\n  codex-wire-gateway serve --config <protected-config.json>\n  codex-wire-gateway transfer-store --config <protected-config.json> --target-directory <new-path> --owners-stopped-and-fenced\n\nThe gateway starts only through the explicit serve command. Stop and remove store access from all old owners first. By wufflyne · https://wufflyne.com\n",
+      "Codex Wire gateway 0.1.0\n\n  codex-wire-gateway doctor --config <protected-config.json>\n  codex-wire-gateway serve --config <protected-config.json>\n  codex-wire-gateway transfer-store --config <protected-config.json> --target-directory <new-path> --owners-stopped-and-fenced\n\nThe gateway starts only through the explicit serve command. Stop and remove store access from all old owners first. By wufflyne · https://wufflyne.com\n",
     );
     return;
   }
@@ -53,7 +53,7 @@ export async function main(args = process.argv.slice(2)) {
     process.stdout.write(
       JSON.stringify(
         {
-          release: "0.0.5",
+          release: "0.1.0",
           protocolVersion: 1,
           schemaVersion: 1,
           node: process.version,

@@ -4,6 +4,8 @@ import { credentialBinding } from "../runtime.js";
 import type { CodexService, RpcEnvelope, NativeGeneration } from "../service/contracts.js";
 import type { KeyRecord } from "./auth.js";
 import { invalid, WireError } from "./errors.js";
+import { validateResetOptions, validateReconcileOptions } from "../account/reset-policy.js";
+import { validateNativeShape } from "../kernel/request.js";
 
 export function validateRpc(value: unknown, key: KeyRecord): RpcEnvelope {
   const e = record(value);
@@ -94,6 +96,16 @@ export function validateRpc(value: unknown, key: KeyRecord): RpcEnvelope {
   )
     invalid("execution");
   record(e.params);
+  if (e.method === "generate") {
+    const params = record(e.params);
+    if (Object.keys(params).some((key) => !["request", "settings", "lite", "context", "affinity", "outputContract"].includes(key))) invalid("params");
+    validateNativeShape(params.request, params.settings, params.lite);
+  }
+  if (e.method === "reset" || e.method === "reconcile") {
+    const options = e.method === "reset" ? validateResetOptions(e.params) : validateReconcileOptions(e.params);
+    if (options.executionKey !== executionKey(e.execution as NonNullable<RpcEnvelope["execution"]>))
+      throw new WireError(403, "execution_scope", "Reset execution identity is inconsistent.");
+  }
   return e as unknown as RpcEnvelope;
 }
 export async function dispatchRpc(
@@ -160,7 +172,7 @@ export async function dispatchRpc(
       return { ...image, bytes: image.bytes.toString("base64") };
     }
     case "generate":
-      exact(["request", "settings", "lite", "context", "affinity"]);
+      exact(["request", "settings", "lite", "context", "affinity", "outputContract"]);
       return service.generate(
         b,
         { ...p, context: e.execution } as unknown as NativeGeneration,

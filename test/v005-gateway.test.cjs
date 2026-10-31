@@ -22,8 +22,9 @@ const {
 } = require("./helpers.cjs");
 const { attestContext, verifyContext } = require("../dist/gateway/context");
 const { BodyMemoryAdmission } = require("../dist/gateway/pool/memory");
+const { AdmissionQueue } = require("../dist/gateway/pool/admission");
 const { OperationStore } = require("../dist/gateway/state/operations");
-async function fixture(t, respond, profiles = 1) {
+async function fixture(t, respond, profiles = 1, tuning) {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "wire-gateway-"));
   await fs.chmod(dir, 0o700);
   const key = Buffer.alloc(32, 0x61),
@@ -90,7 +91,7 @@ async function fixture(t, respond, profiles = 1) {
     await state.close();
     await fs.rm(dir, { recursive: true, force: true });
   });
-  const engine = new GatewayEngine(resources, state, true),
+  const engine = new GatewayEngine(resources, state, true, tuning),
     policy = {
       id: "connection-fixture",
       name: "Fixture",
@@ -691,6 +692,144 @@ test("Memory admission bounds large bodies before reading and cancellation remov
   assert.equal(gate.queuedRequests, 0);
   release();
   assert.equal(gate.reservedBytes, 0);
+});
+test("Shared pending admission bounds the aggregate body and broker queues", async () => {
+  const queue = new AdmissionQueue({ active: 1, account: 1, queued: 64, waitMs: 1000 }),
+    memory = new BodyMemoryAdmission(100, 64, 1000),
+    active = await queue.acquire("account", "active"),
+    occupied = await memory.acquireBytes(100),
+    abort = new AbortController(),
+    settle = work => work.then(release => { release(); return "admitted"; }, error => error.code),
+    broker = settle(queue.acquire("account", "pending", abort.signal)),
+    bodies = Array.from({ length: 63 }, () => settle(memory.acquireBytes(1, abort.signal, queue.pending)));
+  let overflow;
+  try {
+    assert.equal(memory.queuedRequests, 63);
+    overflow = settle(memory.acquireBytes(1, abort.signal, queue.pending));
+    assert.equal(await Promise.race([overflow, new Promise(resolve => setImmediate(() => resolve("still waiting")))]), "memory_queue_full");
+    assert.equal(memory.queuedRequests, 63);
+    assert.equal(queue.pending.count, 64);
+  } finally {
+    abort.abort();
+    await Promise.all([broker, ...bodies, ...(overflow ? [overflow] : [])]);
+    active();
+    occupied();
+  }
+  assert.equal(queue.pending.count, 0);
+  assert.equal(memory.queuedRequests, 0);
+  assert.equal(memory.reservedBytes, 0);
+});
+test("Configured pending limits apply across layers and preserve immediate work", async () => {
+  const { gatewayTuning } = require("../dist/gateway/config");
+  for (const queued of [0, 1]) {
+    const tuning = gatewayTuning({ admission: { active: 1, account: 1, queued, waitMs: 100 } }),
+      queue = new AdmissionQueue(tuning.admission),
+      memory = new BodyMemoryAdmission(100, 64, 1000),
+      active = await queue.acquire("account", null),
+      occupied = await memory.acquireBytes(100),
+      started = Date.now(),
+      body = memory.acquireBytes(1, undefined, queue.pending);
+    assert.equal(queue.pending.count, queued);
+    await assert.rejects(queue.acquire("account", null), error => error.code === "queue_full");
+    await assert.rejects(body, error => error.code === "memory_queue_full");
+    if (queued) assert(Date.now() - started >= 80, "The accepted body waiter must actually await its configured deadline");
+    assert(Date.now() - started < 1000, "Configured body deadline must not use the old 1000ms default");
+    assert.equal(queue.pending.count, 0);
+    assert.equal(memory.queuedRequests, 0);
+    await assert.rejects(queue.acquire("account", null), error => error.code === "queue_full");
+    assert.equal(queue.pending.count, 0);
+    occupied();
+    const immediate = await memory.acquireBytes(1, undefined, queue.pending);
+    assert.equal(queue.pending.count, 0);
+    immediate();
+    active();
+    const next = await queue.acquire("account", null);
+    assert.equal(queue.pending.count, 0);
+    next();
+    assert.equal(queue.activeCount, 0);
+    assert.equal(memory.reservedBytes, 0);
+  }
+});
+test("Shared pending permits follow actual body cancellation and broker drain settlement", async () => {
+  const queue = new AdmissionQueue({ active: 1, account: 1, queued: 2, waitMs: 1000 }),
+    memory = new BodyMemoryAdmission(100, 64, 1000),
+    active = await queue.acquire("account", "branch"),
+    occupied = await memory.acquireBytes(100),
+    abort = new AbortController(),
+    body = memory.acquireBytes(1, abort.signal, queue.pending),
+    broker = queue.acquire("account", "branch");
+  assert.equal(queue.pending.count, 2);
+  queue.drain();
+  assert.equal(queue.pending.count, 1, "A live body waiter must retain its permit during broker drain");
+  assert.equal(memory.queuedRequests, 1);
+  await assert.rejects(broker, error => error.code === "draining");
+  assert.equal(queue.pending.count, 1);
+  abort.abort();
+  await assert.rejects(body, error => error.code === "cancelled");
+  assert.equal(memory.queuedRequests, 0);
+  assert.equal(queue.pending.count, 0);
+  queue.drain();
+  abort.abort();
+  active(); active();
+  occupied(); occupied();
+  assert.equal(queue.pending.count, 0);
+  assert.equal(queue.activeCount, 0);
+  assert.equal(memory.reservedBytes, 0);
+});
+test("Shared pending wakeup progresses from body to branch admission without leaked permits", async () => {
+  const queue = new AdmissionQueue({ active: 2, account: 2, queued: 1, waitMs: 1000 }),
+    memory = new BodyMemoryAdmission(100, 64, 1000),
+    active = await queue.acquire("account", "same-branch"),
+    occupied = await memory.acquireBytes(100),
+    body = memory.acquireBytes(1, undefined, queue.pending);
+  assert.equal(queue.pending.count, 1);
+  await assert.rejects(queue.acquire("account", "same-branch"), error => error.code === "queue_full");
+  occupied();
+  const bodyRelease = await body;
+  assert.equal(queue.pending.count, 0);
+  const broker = queue.acquire("account", "same-branch");
+  assert.equal(queue.pending.count, 1);
+  assert.equal(queue.activeCount, 1, "Branch concurrency remains one even with a free account slot");
+  active();
+  const brokerRelease = await broker;
+  assert.equal(queue.pending.count, 0);
+  assert.equal(queue.activeCount, 1);
+  brokerRelease(); brokerRelease();
+  bodyRelease(); bodyRelease();
+  assert.equal(queue.pending.count, 0);
+  assert.equal(queue.activeCount, 0);
+  assert.equal(memory.reservedBytes, 0);
+});
+test("Independent gateway applications keep separate configured pending budgets", async t => {
+  const { gatewayTuning } = require("../dist/gateway/config"),
+    tuning = gatewayTuning({ admission: { active: 1, account: 1, queued: 1, waitMs: 1000 } }),
+    first = await fixture(t, undefined, 1, tuning),
+    second = await fixture(t, undefined, 1, tuning),
+    applications = [first, second].map(f => new GatewayApplication({ admin: { bootstrapFile: path.join(f.dir, "bootstrap") } }, f.engine)),
+    memory = new BodyMemoryAdmission(100, 64, 1000),
+    occupied = await memory.acquireBytes(100),
+    aborts = [new AbortController(), new AbortController()],
+    work = applications.map((app, i) => memory.acquireBytes(1, aborts[i].signal, app.engine.queue.pending));
+  try {
+    assert.notEqual(applications[0].engine.queue.pending, applications[1].engine.queue.pending);
+    assert.equal(memory.queuedRequests, 2);
+    assert.equal(first.engine.queue.pending.count, 1);
+    assert.equal(second.engine.queue.pending.count, 1);
+    aborts[0].abort();
+    await assert.rejects(work[0], error => error.code === "cancelled");
+    assert.equal(first.engine.queue.pending.count, 0);
+    assert.equal(second.engine.queue.pending.count, 1);
+    aborts[1].abort();
+    await assert.rejects(work[1], error => error.code === "cancelled");
+    assert.equal(second.engine.queue.pending.count, 0);
+    assert.equal(first.calls.length + second.calls.length, 0);
+  } finally {
+    for (const abort of aborts) abort.abort();
+    await Promise.allSettled(work);
+    occupied();
+  }
+  assert.equal(memory.queuedRequests, 0);
+  assert.equal(memory.reservedBytes, 0);
 });
 test("Context attestation authenticates immutable issuance separately from attempt freshness", () => {
   const key = "SYNTHETIC_CONTEXT_KEY",
@@ -1511,14 +1650,14 @@ test("Matched fetch hook strips Request-form internal headers off-origin and for
     async () => {
       const context = await hooks.prepare({ runId: "r" }, async () => {});
       await assert.rejects(
-        transport(
+        hooks.run(context, () => transport(
           new Request("https://gateway.invalid/v1/responses", {
             headers: {
               authorization: "Bearer INFERENCE_FIXTURE",
               "X-N8n-Model-Operation": context.operationId,
             },
           }),
-        ),
+        )),
         /cannot follow redirects/,
       );
     },
@@ -2107,12 +2246,14 @@ test("Actual remote Router preserves verified account distinction and pins an ad
   assert.equal(metadata.identity, undefined);
   assert.equal(metadata.accountId, undefined);
   const secondProfile = await f.resources.store.read(f.bindings[1]);
+  // Changing a verified identity under an existing family is rejected by the
+  // store-wide claim before the router may consider account eligibility.
   await f.resources.store.write({ ...secondProfile, accountId: "account-0" });
   const duplicate = { ...x, executionId: "duplicate-accounts" };
   t.after(() => clearCoordinator(duplicate));
   await assert.rejects(
     make(duplicate).invoke("New run"),
-    /distinct verified provider accounts/,
+    /already owned/,
   );
   assert.equal(sent.length, 3);
   await remote.finish(x);
@@ -2858,10 +2999,10 @@ test("Stateless tool and direct-output schemas never share retained validators o
       f.engine.respond(f.policy, raw),
     ]);
     assert.deepEqual(
-      results.map((result) => result.status),
+      results.map((result) => result.status).sort(),
       ["fulfilled", "rejected"],
     );
-    assert.equal(results[1].reason.status, 422);
+    assert.equal(results.find((result) => result.status === "rejected").reason.status, 422);
     assert.equal(
       captured.size,
       2,
@@ -3387,4 +3528,215 @@ test("Device preparation failure releases its slot and shutdown joins a pending 
   await close;
   assert.equal(authCalls, 0);
   assert.equal((await control.pendingDeliveries()).deliveries.length, 1);
+});
+
+async function socketFixture(t, respond, tuning) {
+  const http = require("node:http"),
+    originalCreate = http.createServer,
+    servers = [],
+    f = await fixture(t, respond, 2, tuning);
+  t.mock.method(http, "createServer", (...args) => {
+    const server = originalCreate(...args);
+    servers.push(server);
+    return server;
+  });
+  const app = new GatewayApplication(
+    {
+      inference: { host: "127.0.0.1", port: 0 },
+      admin: {
+        host: "127.0.0.1", port: 0, origin: "https://console.invalid",
+        bootstrapFile: path.join(f.dir, "bootstrap"),
+      },
+    },
+    f.engine,
+  );
+  await app.authorization.savePolicy({ ...f.policy, mode: "fixed", profiles: [f.bindings[0].profileId] });
+  const keys = {};
+  for (const role of ["inference", "administrator"]) {
+    const delivery = await app.authorization.prepareKey(
+      role === "inference"
+        ? { role, scopes: ["models", "responses"], connectionId: f.policy.id }
+        : { role, scopes: ["control:*"] },
+    );
+    await app.authorization.acknowledge(delivery.deliveryId);
+    keys[role] = delivery.key;
+  }
+  const listener = await require("../dist/gateway/server").listen(app);
+  const send = (route, bytes, options = {}) => {
+    let active;
+    const done = new Promise((resolve, reject) => {
+      active = http.request({
+        host: "127.0.0.1",
+        port: servers[options.admin ? 1 : 0].address().port,
+        path: route, method: "POST",
+        headers: {
+          host: options.admin ? "console.invalid" : "gateway.internal",
+          authorization: "Bearer " + keys[options.admin ? "administrator" : "inference"],
+          "content-type": options.type || "application/json",
+          ...(options.chunked ? {} : { "content-length": options.declared ?? bytes.length }),
+        },
+      }, response => {
+        const chunks = [];
+        response.on("data", chunk => chunks.push(chunk));
+        response.on("error", reject);
+        response.on("end", () => resolve({ status: response.statusCode, text: Buffer.concat(chunks).toString("utf8") }));
+      });
+      active.on("error", reject);
+      active.setTimeout(10000, () => active.destroy(Error("Synthetic socket test deadline")));
+      if (options.partial) active.write(bytes);
+      else void (async () => {
+        const { once } = require("node:events");
+        let offset = 0;
+        for (const length of [1, 2, 3, 5, 7]) {
+          if (offset >= bytes.length) break;
+          if (!active.write(bytes.subarray(offset, offset + length))) await once(active, "drain");
+          offset += length;
+        }
+        while (offset < bytes.length) {
+          const end = Math.min(offset + 16381, bytes.length);
+          if (!active.write(bytes.subarray(offset, end))) await once(active, "drain");
+          offset = end;
+        }
+        active.end();
+      })().catch(error => active.destroy(error));
+    });
+    done.catch(() => {});
+    return { done, abort: () => active.destroy(Error("Synthetic ingress abort")) };
+  };
+  return { ...f, app, send, close: () => listener.close() };
+}
+async function awaitCondition(check) {
+  const deadline = Date.now() + 3000;
+  while (!check()) {
+    assert(Date.now() < deadline, "Bounded socket progress deadline");
+    await new Promise(resolve => setTimeout(resolve, 5));
+  }
+}
+
+test("Real HTTP ingress preserves multi-chunk Unicode while a response holds its memory lease", async t => {
+  const entered = deferred(), release = deferred();
+  const f = await socketFixture(t, async (_, init, count) => {
+    if (count !== 1) return sseResponse([complete(output("Second answer"))]);
+    entered.resolve();
+    return new Response(new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode(": admitted hold\n\n"));
+        void release.promise.then(() => {
+          const bytes = sseResponse([complete(output("First answer"))]);
+          return bytes.arrayBuffer();
+        }).then(bytes => { controller.enqueue(new Uint8Array(bytes)); controller.close(); });
+      },
+    }), { headers: { "content-type": "text/event-stream" } });
+  });
+  try {
+    const text = "Unicode boundary: Привет 世界 🙂 / exact history. ".repeat(12000),
+      first = f.send("/v1/responses", Buffer.from(JSON.stringify({ model: "synthetic-model", input: text, store: false, stream: true })), { chunked: true }),
+      { gatewayMemory } = require("../dist/gateway/pool/memory");
+    await entered.promise;
+    assert.equal(JSON.parse(f.calls[0].init.body).input[0].content[0].text, text);
+    assert(gatewayMemory.reservedBytes > 0);
+    const second = await f.send("/v1/responses", Buffer.from(JSON.stringify({ model: "synthetic-model", input: "Second exact input", store: false }))).done;
+    assert.equal(second.status, 200);
+    assert.equal(f.calls.length, 2);
+    assert(gatewayMemory.reservedBytes > 0, "First streaming response still owns its lease");
+    release.resolve();
+    const result = await first.done;
+    assert.equal(result.status, 200);
+    assert(result.text.includes("First answer"));
+    await awaitCondition(() => gatewayMemory.reservedBytes === 0);
+    const control = await f.send("/control/v1/connections", Buffer.from(JSON.stringify({ name: "Unicode pool 世界", mode: "fixed", profiles: [f.bindings[0].profileId], allowedModels: [], installationId: "instance-fixture", localContinuityConsent: true })), { admin: true }).done;
+    assert.equal(control.status, 200);
+    assert.equal(JSON.parse(control.text).connection.name, "Unicode pool 世界");
+    assert.equal(f.calls.length, 2);
+  } finally {
+    release.resolve();
+    await f.close();
+  }
+});
+
+test("Real HTTP ingress rejects malformed or oversized bodies and recovers an aborted lease", async t => {
+  const f = await socketFixture(t);
+  try {
+    const { gatewayMemory } = require("../dist/gateway/pool/memory");
+    for (const [bytes, options, status] of [
+      [Buffer.from("not-json"), {}, 400],
+      [Buffer.from("{}"), { type: "text/plain" }, 400],
+      [Buffer.from("{}"), { declared: 32 * 1024 * 1024 + 1 }, 413],
+      [Buffer.alloc(512 * 1024 + 1, 32), { admin: true }, 413],
+    ]) {
+      const result = await f.send(options.admin ? "/control/v1/connections" : "/v1/responses", bytes, options).done;
+      assert.equal(result.status, status);
+      await awaitCondition(() => gatewayMemory.reservedBytes === 0);
+    }
+    assert.equal(f.calls.length, 0);
+    const partial = f.send("/v1/responses", Buffer.from('{"model":"synthetic-model","input":"unfinished'), { declared: 1024 * 1024, partial: true });
+    await awaitCondition(() => gatewayMemory.reservedBytes > 0);
+    partial.abort();
+    await assert.rejects(partial.done, /Synthetic ingress abort/);
+    await awaitCondition(() => gatewayMemory.reservedBytes === 0);
+    assert.equal(f.calls.length, 0);
+    const valid = await f.send("/v1/responses", Buffer.from(JSON.stringify({ model: "synthetic-model", input: "Progress after abort", store: false }))).done;
+    assert.equal(valid.status, 200);
+    assert.equal(f.calls.length, 1);
+    await awaitCondition(() => gatewayMemory.reservedBytes === 0);
+  } finally { await f.close(); }
+});
+
+for (const queued of [0, 1]) test(`Real HTTP listeners share the configured pending limit ${queued}`, async t => {
+  const { gatewayTuning } = require("../dist/gateway/config"),
+    { gatewayMemory } = require("../dist/gateway/pool/memory"),
+    { accountIdentityKey } = require("../dist/core/affinity"),
+    tuning = gatewayTuning({ admission: { active: 1, account: 1, queued, waitMs: 1000 } }),
+    f = await socketFixture(t, undefined, tuning),
+    account = accountIdentityKey(await f.resources.store.read(f.bindings[0])),
+    active = await f.engine.queue.acquire(account, null),
+    abort = new AbortController(),
+    broker = queued ? f.engine.queue.acquire(account, null, abort.signal) : undefined,
+    input = Buffer.from(JSON.stringify({ model: "synthetic-model", input: "Configured queue control", store: false })),
+    control = Buffer.from(JSON.stringify({ name: "Immediate control", mode: "fixed", profiles: [f.bindings[0].profileId], allowedModels: [], installationId: "instance-fixture", localContinuityConsent: true }));
+  let occupied, remaining;
+  broker?.catch(() => {});
+  try {
+    assert.equal(f.engine.queue.pending.count, queued);
+    occupied = gatewayMemory.tryAcquireBytes(310 * 1024 * 1024);
+    const inference = await f.send("/v1/responses", input).done;
+    assert.equal(inference.status, 429);
+    assert.equal(JSON.parse(inference.text).error.code, "memory_queue_full");
+    assert.equal(f.engine.queue.pending.count, queued);
+    const immediate = await f.send("/control/v1/connections", control, { admin: true }).done;
+    assert.equal(immediate.status, 200, "Control work fitting memory must not require a pending permit");
+    assert.equal(f.engine.queue.pending.count, queued);
+    remaining = gatewayMemory.tryAcquireBytes(10 * 1024 * 1024);
+    const admin = await f.send("/control/v1/connections", control, { admin: true }).done;
+    assert.equal(admin.status, 429);
+    assert.equal(JSON.parse(admin.text).error.code, "memory_queue_full");
+    assert.equal(f.engine.queue.pending.count, queued);
+    abort.abort();
+    if (broker) await assert.rejects(broker, error => error.code === "cancelled");
+    assert.equal(f.engine.queue.pending.count, 0);
+    const started = Date.now(),
+      timeout = await f.send("/v1/responses", input).done;
+    assert.equal(timeout.status, 429);
+    assert.equal(JSON.parse(timeout.text).error.code, "memory_queue_full");
+    assert(Date.now() - started < 2000, "Both listeners must respect the reduced configured wait deadline");
+    assert.equal(f.engine.queue.pending.count, 0);
+    assert.equal(gatewayMemory.queuedRequests, 0);
+    assert.equal(f.calls.length, 0);
+    remaining(); remaining = undefined;
+    occupied(); occupied = undefined;
+    active();
+    const progress = await f.send("/v1/responses", input).done;
+    assert.equal(progress.status, 200);
+    assert(progress.text.includes("Fixture answer"));
+    assert.equal(f.calls.length, 1);
+    await awaitCondition(() => gatewayMemory.reservedBytes === 0);
+    assert.equal(f.engine.queue.pending.count, 0);
+  } finally {
+    abort.abort();
+    if (broker) await Promise.allSettled([broker]);
+    remaining?.();
+    occupied?.();
+    active();
+    await f.close();
+  }
 });

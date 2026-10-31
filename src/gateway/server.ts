@@ -29,8 +29,18 @@ import { accountIdentityKey, executionKey } from "../core/affinity.js";
 import type { TransportEvent } from "../core/transport.js";
 import type { OperationStore } from "./state/operations.js";
 import { ContextHandshake } from "./context-handshake.js";
+import type { PendingAdmissionBudget } from "./pool/admission.js";
 
 const MAX_BODY = 32 * 1024 * 1024;
+// The Node bridge transfers one bounded buffer without copying it into Fetch's body storage.
+const receivedBodies = new WeakMap<Request, Buffer>();
+function parseBody(bytes: Buffer) {
+  try {
+    return JSON.parse(bytes.toString("utf8"));
+  } catch {
+    invalid("body", "The request body is not valid JSON.");
+  }
+}
 async function body(request: Request) {
   const length = Number(request.headers.get("content-length") ?? 0);
   if (length > MAX_BODY)
@@ -41,28 +51,50 @@ async function body(request: Request) {
     );
   if (!request.headers.get("content-type")?.startsWith("application/json"))
     invalid("content_type", "Use application/json.");
+  const received = receivedBodies.get(request);
+  if (received) {
+    receivedBodies.delete(request);
+    return parseBody(received);
+  }
   const reader = request.body?.getReader(),
     chunks: Uint8Array[] = [];
   let size = 0;
   if (!reader) invalid("body");
-  while (true) {
-    const next = await reader.read();
-    if (next.done) break;
-    size += next.value.length;
-    if (size > MAX_BODY) {
-      await reader.cancel();
-      throw new WireError(
-        413,
-        "request_too_large",
-        "The request exceeds 32 MiB.",
-      );
-    }
-    chunks.push(next.value);
-  }
   try {
-    return JSON.parse(Buffer.concat(chunks, size).toString("utf8"));
-  } catch {
-    invalid("body", "The request body is not valid JSON.");
+    while (true) {
+      const next = await reader.read();
+      if (next.done) break;
+      size += next.value.length;
+      if (size > MAX_BODY) {
+        await reader.cancel();
+        throw new WireError(
+          413,
+          "request_too_large",
+          "The request exceeds 32 MiB.",
+        );
+      }
+      chunks.push(next.value);
+    }
+    const bytes = Buffer.concat(chunks, size);
+    chunks.length = 0;
+    return parseBody(bytes);
+  } finally {
+    chunks.length = 0;
+    reader.releaseLock();
+  }
+}
+function receivedRequest(
+  url: URL,
+  init: RequestInit,
+  chunks: Buffer[],
+  size: number,
+) {
+  try {
+    const request = new Request(url, init);
+    if (size) receivedBodies.set(request, Buffer.concat(chunks, size));
+    return request;
+  } finally {
+    chunks.length = 0;
   }
 }
 function bearer(request: Request) {
@@ -299,7 +331,7 @@ export class GatewayApplication {
         if (url.pathname === "/wire/v1/handshake" && request.method === "GET")
           return json({
             protocolVersion: 1,
-            release: "0.0.5",
+            release: "0.1.0",
             schemaVersion: 1,
             features: [
               "native-rpc-v1",
@@ -885,6 +917,7 @@ async function bridge(
   memory: BodyMemoryAdmission,
   preflight: (r: Request) => Promise<void>,
   admin: boolean,
+  pending: PendingAdmissionBudget,
 ) {
   const controller = new AbortController();
   outgoing.once("close", () => {
@@ -923,12 +956,14 @@ async function bridge(
           8 * 1024 * 1024 +
             4 * (declared === undefined ? 512 * 1024 : Number(declared)),
           controller.signal,
+          pending,
         )
       : memory.acquireRequest(
           incoming.method ?? "GET",
           declared === undefined ? undefined : Number(declared),
           incoming.headers["transfer-encoding"] !== undefined,
           controller.signal,
+          pending,
         ));
     incoming.setTimeout(15000, () => {
       controller.abort();
@@ -937,7 +972,7 @@ async function bridge(
     const chunks: Buffer[] = [];
     let size = 0;
     for await (const raw of incoming) {
-      const chunk = Buffer.from(raw);
+      const chunk = Buffer.isBuffer(raw) ? raw : Buffer.from(raw);
       size += chunk.length;
       if (size > (admin ? 512 * 1024 : MAX_BODY))
         throw new WireError(
@@ -948,14 +983,23 @@ async function bridge(
       chunks.push(chunk);
     }
     incoming.setTimeout(0);
-    const request = new Request(new URL(incoming.url ?? "/", origin), {
-      method: incoming.method,
-      headers,
-      ...(size ? { body: Buffer.concat(chunks, size) } : {}),
-      signal: controller.signal,
-    });
+    const request = receivedRequest(
+      new URL(incoming.url ?? "/", origin),
+      {
+        method: incoming.method,
+        headers,
+        signal: controller.signal,
+      },
+      chunks,
+      size,
+    );
     requestMemory.set(request, release);
-    const response = await handle(request);
+    let response: Response;
+    try {
+      response = await handle(request);
+    } finally {
+      receivedBodies.delete(request);
+    }
     outgoing.writeHead(response.status, Object.fromEntries(response.headers));
     responseReader = response.body?.getReader();
     if (responseReader)
@@ -1054,6 +1098,7 @@ export async function listen(
           memory,
           (r) => application.preflight(r, admin),
           admin,
+          application.engine.queue.pending,
         );
         bridges.add(work);
         void work.finally(() => bridges.delete(work)).catch(() => undefined);

@@ -3,6 +3,7 @@ const fs = require("node:fs/promises");
 const path = require("node:path");
 const { spawnSync } = require("node:child_process");
 const { createHash, randomUUID } = require("node:crypto");
+const { preparedSecurity } = require("./prepared-security.cjs");
 const {
   releaseNames,
   releaseImages,
@@ -34,6 +35,7 @@ function run(args, options = {}) {
   return result.stdout.trim();
 }
 async function main() {
+  const security = preparedSecurity(root, process.env.CODEX_RELEASE_SECURITY_BUNDLE);
   const disposable = `${prefix}-${randomUUID()}`;
   const initialSource = await sourceInventory(root);
   const evidenceIndex = process.argv.indexOf("--physical-evidence");
@@ -73,6 +75,8 @@ async function main() {
     label,
     "-f",
     "Dockerfile.build",
+    "--build-context",
+    `security-bundle=${security.directory}`,
     "-t",
     build,
     ".",
@@ -226,6 +230,10 @@ async function main() {
     ...compat,
     packageVersion: version,
     status: "local-artifacts-built",
+    imageVariant: "legacy-custom-embedded",
+    nodeNamespace: "CUSTOM",
+    lifecycleOverlayInstalled: false,
+    accountHelper: "/opt/n8n-codex/node_modules/.bin/n8n-codex-account",
     sourceHash,
     sourceInventory: inventory,
     packageInventory: packageEntries,
@@ -233,6 +241,7 @@ async function main() {
     buildImage: build,
     stagingImage: image,
     archiveTags,
+    security,
     documentedImage: documented,
     nativeSmoke: nativeResult,
     archiveLoadStart: { loadedTag: loaded, emptyStateHealthy: healthy },
