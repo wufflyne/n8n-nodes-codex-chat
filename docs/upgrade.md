@@ -1,5 +1,9 @@
 # Upgrade and rollback
 
+For native 0.1.1 keep the original Manager credential/passphrase, current private codex-wire state, latest token/reset journals and active Service workflow. No automatic store adoption or old snapshot restoration occurs. Configured older bindings retain the explicit legacy path; adoption is refused when exclusive handover cannot be proven. The procedures below describe the retained older deployment variants.
+
+## Legacy 0.1.0 deployment upgrades
+
 Version 0.1.0 preserves package, node, credential and helper identifiers, existing workflow parameters, profile/envelope v1, protected bindings and the master key. It adds a store-wide encrypted token-ownership and renewal journal. This is a one-way safety-format upgrade: v0.0.5 and older binaries cannot safely own the migrated store.
 
 1. Pause new executions, drain active work and stop every old owner. Record the exact image, package and configuration identities. Fence other processes and devices that could renew the same token family.
@@ -16,6 +20,6 @@ Rollback is limited to compatible application code that understands the current 
 
 Native opaque memory now uses metadata v2 bound to the exact account, model and known codec. Old v1 or unproven opaque memory is rejected with a controlled error. Preserve or export it, then start a deliberate new memory session; do not edit its model marker, strip metadata or silently reuse it with another model. Ordinary visible messages without opaque metadata retain their supported behavior.
 
-An awaited encrypted success capture may permit identity-verified local recovery after a parsing, verification or commit failure. Recovery never renews again. Lost responses or failed capture writes cannot be reconstructed; preserve the evidence and reconnect with an independent login. The [maintenance helper procedure](install.md#recover-a-captured-successful-renewal) explains the stopped-owner requirements.
+An awaited encrypted success capture may permit identity-verified local recovery after a parsing, verification or commit failure. Recovery never renews again. Lost responses or failed capture writes cannot be reconstructed; preserve the evidence and reconnect with an independent login. The [maintenance helper procedure](legacy-install.md#recover-a-captured-successful-renewal) explains the stopped-owner requirements.
 
 By [wufflyne](https://wufflyne.com).

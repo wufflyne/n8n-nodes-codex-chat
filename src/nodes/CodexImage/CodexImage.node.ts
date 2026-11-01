@@ -1,4 +1,4 @@
-import { nativeService } from "../../service/native.js";
+import { nativeAccount } from "../../service/native-connections.js";
 import {
   NodeConnectionTypes,
   NodeOperationError,
@@ -7,7 +7,6 @@ import {
   type IExecuteFunctions,
   type INodeExecutionData,
 } from "n8n-workflow";
-import { credentialBinding } from "../../runtime.js";
 import { assert, safeError } from "../../core/errors.js";
 import { nativeContext } from "../../n8n/context.js";
 export class CodexImage implements INodeType {
@@ -78,8 +77,7 @@ export class CodexImage implements INodeType {
     ],
   };
   async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
-    const service = nativeService(),
-      binding = credentialBinding(await this.getCredentials("codexAccount")),
+    const { service, binding } = await nativeAccount(this),
       result: INodeExecutionData[] = [];
     for (let i = 0; i < this.getInputData().length; i++)
       try {

@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "packageVersion": "0.1.0",
-  "status": "0.1.0 release contract; exact artifact acceptance and live scope are recorded in the release receipt",
+  "packageVersion": "0.1.1",
+  "status": "0.1.1 native stock GUI: qualified finite synthetic surface; separate standalone Agents/pool unsupported",
   "protocol": {
     "clientVersion": "0.166.0",
     "commit": "55c099a142eb302188fee00ab9e9062f2db1c359"
@@ -26,7 +26,8 @@
       "responses-v1",
       "responses-lite-v1"
     ],
-    "retainedLegacyPolicy": "Reject absent/unknown codec proof before dispatch or completed-response/tool replay; preserve records for deliberate recovery."
+    "retainedLegacyPolicy": "Reject absent/unknown codec proof before dispatch or completed-response/tool replay; preserve records for deliberate recovery.",
+    "supportScope": "Retained guarded 0.1.0 integration/protocol; not a stock all-GUI qualification"
   },
   "namespaces": [
     "CUSTOM",
@@ -63,7 +64,7 @@
     "webhook": 2.2,
     "respondToWebhook": 1.5
   },
-  "nativeNodeVersionsScope": "Pinned node versions exercised in installed synthetic qualification. Live entitlement and public-registry installation are reported separately.",
+  "nativeNodeVersionsScope": "Retained historical functional version matrix; new exact stock evidence and final artifact scope must be reported separately.",
   "capabilities": [
     {
       "id": "native_chat_tools",
@@ -71,7 +72,8 @@
       "verification": {
         "synthetic": true,
         "native": true,
-        "live": false
+        "live": false,
+        "scope": "Historical 0.1.0 companion evidence; not automatically a 0.1.1 stock pass"
       },
       "sourceSupported": true,
       "reason": "Installed embedded and remote workflows exercise both supported codecs, native tools and streaming with controlled providers."
@@ -82,7 +84,8 @@
       "verification": {
         "synthetic": true,
         "native": true,
-        "live": false
+        "live": false,
+        "scope": "Historical 0.1.0 companion evidence; not automatically a 0.1.1 stock pass"
       },
       "sourceSupported": true,
       "reason": "Installed account nodes exercise local status, authenticated synthetic models and quota reads; real entitlement is not inferred."
@@ -93,7 +96,8 @@
       "verification": {
         "synthetic": true,
         "native": true,
-        "live": false
+        "live": false,
+        "scope": "Historical 0.1.0 companion evidence; not automatically a 0.1.1 stock pass"
       },
       "sourceSupported": true,
       "reason": "Installed native Router exercises ordered fresh admission and pinned tool turns; it is distinct from the gateway 32-profile pool."
@@ -104,7 +108,8 @@
       "verification": {
         "synthetic": true,
         "native": true,
-        "live": false
+        "live": false,
+        "scope": "Historical 0.1.0 companion evidence; not automatically a 0.1.1 stock pass"
       },
       "sourceSupported": true,
       "reason": "Installed native/control paths exercise consent, bounds, uncertainty and reconciliation with synthetic providers only; no real spending is claimed."
@@ -115,7 +120,8 @@
       "verification": {
         "synthetic": true,
         "native": true,
-        "live": false
+        "live": false,
+        "scope": "Historical 0.1.0 companion evidence; not automatically a 0.1.1 stock pass"
       },
       "sourceSupported": true,
       "reason": "Installed chains, extraction, classification and parser repair exercise owned structured output on both codecs; repair calls are host-owned."
@@ -126,7 +132,8 @@
       "verification": {
         "synthetic": true,
         "native": true,
-        "live": false
+        "live": false,
+        "scope": "Historical 0.1.0 companion evidence; not automatically a 0.1.1 stock pass"
       },
       "sourceSupported": true,
       "reason": "Installed native and standalone paths exercise supported image inputs with controlled providers; header/signature checks are not a complete image decoder."
@@ -137,7 +144,8 @@
       "verification": {
         "synthetic": true,
         "native": true,
-        "live": false
+        "live": false,
+        "scope": "Historical 0.1.0 companion evidence; not automatically a 0.1.1 stock pass"
       },
       "sourceSupported": true,
       "reason": "Installed native image action validates inputs and delivers exact synthetic image bytes. Real image-generation entitlement remains unverified."
@@ -148,7 +156,8 @@
       "verification": {
         "synthetic": true,
         "native": true,
-        "live": false
+        "live": false,
+        "scope": "Historical 0.1.0 companion evidence; not automatically a 0.1.1 stock pass"
       },
       "sourceSupported": true,
       "reason": "Installed requests retain affinity and report observed synthetic usage. Cache hits, quota savings and quality equivalence are not inferred."
@@ -159,7 +168,8 @@
       "verification": {
         "synthetic": true,
         "native": true,
-        "live": false
+        "live": false,
+        "scope": "Historical 0.1.0 companion evidence; not automatically a 0.1.1 stock pass"
       },
       "sourceSupported": true,
       "reason": "Installed workflow execution reports are checked against actual controlled-provider calls and retained field coverage."
@@ -170,7 +180,8 @@
       "verification": {
         "synthetic": true,
         "native": true,
-        "live": false
+        "live": false,
+        "scope": "Historical 0.1.0 companion evidence; not automatically a 0.1.1 stock pass"
       },
       "sourceSupported": true,
       "reason": "Installed memory preserves retained tool-group metadata and complete visible replay. Stock Simple Memory does not retain final assistant provider metadata."
@@ -181,7 +192,8 @@
       "verification": {
         "synthetic": true,
         "native": false,
-        "live": false
+        "live": false,
+        "scope": "Historical 0.1.0 companion evidence; not automatically a 0.1.1 stock pass"
       },
       "sourceSupported": false,
       "reason": "Requires a distributed coordinator; this release rejects queue mode."
@@ -192,7 +204,8 @@
       "verification": {
         "synthetic": true,
         "native": false,
-        "live": false
+        "live": false,
+        "scope": "Historical 0.1.0 companion evidence; not automatically a 0.1.1 stock pass"
       },
       "sourceSupported": false,
       "reason": "No supported subscription wire contract; use explicit native preprocessing/tools."
@@ -203,7 +216,8 @@
       "verification": {
         "synthetic": true,
         "native": false,
-        "live": false
+        "live": false,
+        "scope": "Historical 0.1.0 companion evidence; not automatically a 0.1.1 stock pass"
       },
       "sourceSupported": false,
       "reason": "No purchase/top-up/reserve/settings writer exists."
@@ -214,7 +228,8 @@
       "verification": {
         "synthetic": false,
         "native": false,
-        "live": false
+        "live": false,
+        "scope": "Historical 0.1.0 companion evidence; not automatically a 0.1.1 stock pass"
       },
       "sourceSupported": true,
       "reason": "Pinned source supports edits but lifecycle is outside this finite release."
@@ -225,7 +240,8 @@
       "verification": {
         "synthetic": true,
         "native": false,
-        "live": false
+        "live": false,
+        "scope": "Historical 0.1.0 companion evidence; not automatically a 0.1.1 stock pass"
       },
       "sourceSupported": false,
       "reason": "Discovery accepts future model IDs only through the two authenticated known codecs."
@@ -236,10 +252,13 @@
       "verification": {
         "synthetic": true,
         "native": true,
-        "live": false
+        "live": false,
+        "scope": "Historical 0.1.0 companion evidence; not automatically a 0.1.1 stock pass"
       },
       "sourceSupported": true,
-      "reason": "Installed standalone Agents exercise both codecs with stored/stateless and streamed/nonstreamed paths against controlled providers."
+      "reason": "Installed standalone Agents exercise both codecs with stored/stateless and streamed/nonstreamed paths against controlled providers.",
+      "supportScope": "Retained guarded legacy integration; not supported as full stock all-GUI functionality",
+      "stockGuiSupported": false
     },
     {
       "id": "full_account_pool",
@@ -247,10 +266,13 @@
       "verification": {
         "synthetic": true,
         "native": true,
-        "live": false
+        "live": false,
+        "scope": "Historical 0.1.0 companion evidence; not automatically a 0.1.1 stock pass"
       },
       "sourceSupported": true,
-      "reason": "Installed gateway qualification exercises all32 ordered candidates, capability/quota boundaries and persistent admission pins with controlled accounts."
+      "reason": "Installed gateway qualification exercises all32 ordered candidates, capability/quota boundaries and persistent admission pins with controlled accounts.",
+      "supportScope": "Retained guarded legacy integration; not supported as full stock all-GUI functionality",
+      "stockGuiSupported": false
     },
     {
       "id": "account_console",
@@ -258,10 +280,13 @@
       "verification": {
         "synthetic": true,
         "native": true,
-        "live": false
+        "live": false,
+        "scope": "Historical 0.1.0 companion evidence; not automatically a 0.1.1 stock pass"
       },
       "sourceSupported": true,
-      "reason": "Actual protected console/browser and HTTP checks exercise onboarding, ordered policies, authentication and bounded synthetic device lifecycle."
+      "reason": "Actual protected console/browser and HTTP checks exercise onboarding, ordered policies, authentication and bounded synthetic device lifecycle.",
+      "supportScope": "Retained guarded legacy integration; not supported as full stock all-GUI functionality",
+      "stockGuiSupported": false
     },
     {
       "id": "typed_native_rpc",
@@ -269,7 +294,8 @@
       "verification": {
         "synthetic": true,
         "native": true,
-        "live": false
+        "live": false,
+        "scope": "Historical 0.1.0 companion evidence; not automatically a 0.1.1 stock pass"
       },
       "sourceSupported": true,
       "reason": "Actual installed embedded/remote native paths exercise request validation, instance scope and both supported codecs."
@@ -277,16 +303,19 @@
   ],
   "limitations": [
     "Only known subscription codecs are supported; new catalog slugs do not imply unknown protocol or modality support.",
-    "Full pool requires the matched authenticated server lifecycle hook; stock n8n alone supports a fixed-account connection.",
+    "Full pool requires the matched authenticated server lifecycle hook; a fixed endpoint alone does not prove native GUI credential delivery.",
     "Assistant Chat Completions, direct PDF/audio/video, hosted provider tools, image editing, queue/multiworker and purchasing are unsupported.",
-    "Live device consent, rotating renewal, multiple real accounts, image generation, reset spending, cache savings and model-quality equivalence are unqualified for 0.1.0.",
+    "Live device consent, rotating renewal, multiple real accounts, image generation, reset spending, cache savings and model-quality equivalence are unqualified for this release.",
     "Encrypted local continuity defaults to 30 days idle / 90 days absolute; store:false does not retain prompt or response bodies.",
     "Legacy native workflow crash replay is unsupported; native unknown/duplicate outcomes fail closed.",
     "Stock standalone Agents has no user fork/regenerate endpoint in this pinned runtime; the integration does not add one.",
     "Synthetic episodic memory uses a separately configured embedding backend; Codex Wire embeddings remain unsupported.",
     "Agents source differential retains the six known baseline diagnostics. Expanded lifecycle/security source and dependency differentials are recorded separately; no full upstream clean typecheck is claimed.",
     "Pinned Agent V3 Code Tool may add call metadata such as toolCallId; a strict manual schema can reject those additional fields. Check tool results and declare the intended schema explicitly.",
-    "Stock Simple Memory retains restored tool-group metadata but constructs final assistant messages from visible strings without provider metadata; missing final opaque reasoning is not reconstructed."
+    "Stock Simple Memory retains restored tool-group metadata but constructs final assistant messages from visible strings without provider metadata; missing final opaque reasoning is not reconstructed.",
+    "Stock Simple Memory is process-local. Saved Chat history does not guarantee provider context after a process restart.",
+    "Pinned stock Zod-based parsers are unqualified for untrusted model output. Use the optional Codex Output Parser in an ordinary Agent or Basic LLM Chain.",
+    "The basic private Codex Chat route admits at most262144 UTF-16 visible text units,1024 ASCII quotes and67108864 cumulative rendering-work units; unsafe fragments cause controlled refusal without truncation."
   ],
   "qualificationGuide": "docs/qualification.md",
   "nativeMetadata": {
@@ -317,6 +346,36 @@
     "bodyBytes": 1048576,
     "toolInputElements": 10000,
     "manifest": "integration/security/image-manifest.json",
-    "osManifest": "integration/security/os/manifest.json"
+    "osManifest": "integration/security/os/manifest.json",
+    "scope": "Historical matched 0.1.0 companion only; not applied by stock npm installation"
+  },
+  "nativeGui": {
+    "nodes": 6,
+    "credentials": [
+      "codexAccount",
+      "codexWireManager"
+    ],
+    "oneManagerPerInstance": true,
+    "multipleAccounts": true,
+    "setup": "Native Community Nodes + saved active Service workflow + user-chosen encrypted passphrase",
+    "state": "Existing persisted n8n root/codex-wire",
+    "ownerLease": "OS-backed SQLite EXCLUSIVE plus permanent older-owner guards",
+    "legacyAdoption": "Refuse when exclusive handover is not proven; never silently replace keys/bindings/journals",
+    "standaloneStock": "Full host-attested pool and automatic native OpenAI credential delivery unsupported",
+    "releaseScope": [
+      "npm",
+      "GitHub"
+    ],
+    "dockerPublication": false,
+    "outputParser": "Optional Codex Output Parser: public BaseOutputParser/JSON Schema, owned first-error Ajv, no implicit repair",
+    "chatHub": "Private basic ChatTrigger\u2192one Agent3 with one fixed Codex Chat Model and optional memory; tools/parsers/Router/custom outputs refused before provider work",
+    "securityScope": "Package-owned parser and new basic Codex Chat replies only; host dependencies, other providers, historical messages and arbitrary workflow code remain operator responsibilities",
+    "tests": {
+      "full": 444,
+      "focusedSubset": 51,
+      "subsetIncludedInFull": true,
+      "realAccount": false
+    },
+    "qualificationGuide": "docs/qualification.md"
   }
 }

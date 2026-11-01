@@ -6,6 +6,7 @@ import type { ModelSettings, ResponseRequest, Session, Binding } from "../../cor
 import type { CodexService } from "../../service/contracts.js";
 import type { AccountReader } from "../../account/usage.js";
 import type { ResetController } from "../../account/reset.js";
+import { ManagedService } from "../../service/managed.js";
 
 /** Native-only adapter materializes safe account metadata; OAuth never crosses RPC. */
 export function serviceModel(
@@ -16,6 +17,16 @@ export function serviceModel(
   },
 ) {
   const { policy, ...config } = options;
+  if (service instanceof ManagedService) {
+    const r = service.modelResources(binding);
+    return new CodexChatModel({
+      ...config,
+      session: r.session,
+      catalog: r.catalog,
+      transport: r.transport,
+      account: { binding, reader: r.reader, reset: r.reset, policy },
+    });
+  }
   if (service instanceof EmbeddedService) {
     const r = service.resources;
     return new CodexChatModel({
@@ -45,7 +56,14 @@ export function serviceModel(
       let admitted = false;
       for await (const event of service.generate(
         binding,
-        { request, settings, lite, context: config.context, affinity: context.affinity, outputContract: context.outputContract },
+        {
+          request,
+          settings,
+          lite,
+          context: config.context,
+          affinity: context.affinity,
+          outputContract: context.outputContract,
+        },
         active.length ? AbortSignal.any(active) : undefined,
         async () => {
           admitted = true;

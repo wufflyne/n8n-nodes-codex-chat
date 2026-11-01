@@ -12,7 +12,8 @@ import {
   type Fetch,
 } from "../core/http.js";
 import { count } from "../core/usage.js";
-import type { Session } from "../core/types.js";
+import type { Profile, Session } from "../core/types.js";
+import { createHash } from "node:crypto";
 import type {
   AccountSnapshot,
   Freshness,
@@ -367,6 +368,7 @@ export function parseResetCredits(
   return result;
 }
 export class AccountReader {
+  async settleReads() { await Promise.allSettled([...this.pending.values()]); }
   private cache = new Map<string, { snapshot?: AccountSnapshot }>();
   private pending = new Map<string, Promise<unknown>>();
   constructor(
@@ -381,6 +383,15 @@ export class AccountReader {
       this.sessions.refreshEnabled,
       this.clock(),
     );
+  }
+  async cachedAccount(binding: Binding) {
+    return this.cachedProfile(await this.sessions.store.read(binding));
+  }
+  /** Pure cache lookup: editor callers must read through a read-only store first. */
+  cachedProfile(p: Profile) {
+    const affinity = createHash("sha256").update(`${p.id}:${p.subject}:${p.accountId}`).digest("hex");
+    const snapshot = this.cache.get(`${affinity}:${p.generation}`)?.snapshot;
+    return snapshot ? structuredClone(snapshot) : undefined;
   }
   /** Decision boundaries need new reads; detached older waiters keep their own result. */
   invalidateBeforeFreshRead(session: Session): void {
@@ -479,6 +490,7 @@ export class AccountReader {
       }
     throwIfAborted(options.signal);
     snapshot.routing = quotaDecision(snapshot, options.model ?? null, this.clock());
+    if (this.cache.get(key) === entry) entry.snapshot = structuredClone(snapshot);
     return structuredClone(snapshot);
   }
   private checkReadError(error: unknown) {

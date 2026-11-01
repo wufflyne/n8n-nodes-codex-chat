@@ -1,6 +1,6 @@
 {
   "name": "n8n-nodes-codex-chat",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "An independent, experimental Codex subscription integration for self-hosted n8n.",
   "license": "MIT",
   "main": "dist/index.js",
@@ -62,13 +62,16 @@
   "n8n": {
     "n8nNodesApiVersion": 1,
     "credentials": [
-      "dist/credentials/CodexAccount.credentials.js"
+      "dist/credentials/CodexAccount.credentials.js",
+      "dist/credentials/CodexWireManager.credentials.js"
     ],
     "nodes": [
       "dist/nodes/CodexChatModel/CodexChatModel.node.js",
       "dist/nodes/CodexAccount/CodexAccount.node.js",
       "dist/nodes/CodexAccountRouter/CodexAccountRouter.node.js",
-      "dist/nodes/CodexImage/CodexImage.node.js"
+      "dist/nodes/CodexImage/CodexImage.node.js",
+      "dist/nodes/CodexWireService/CodexWireService.node.js",
+      "dist/nodes/CodexOutputParser/CodexOutputParser.node.js"
     ]
   },
   "author": {

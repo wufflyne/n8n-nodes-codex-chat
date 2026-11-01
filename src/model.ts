@@ -12,6 +12,7 @@ import type {
 import type { Runnable } from "@langchain/core/runnables";
 import { ChatGenerationChunk, type ChatResult } from "@langchain/core/outputs";
 import { ReplayLedger } from "./core/replay.js";
+import { ChatOutputBudget } from "./core/chat-output.js";
 import {
   ModelCatalog,
   validateReliability,
@@ -79,6 +80,8 @@ export interface CodexModelOptions {
     policy: RecoveryPolicy;
   };
   candidateKey?: string;
+  /** Native basic Chat only; independent tools/parsers are refused before execution. */
+  nativeChatOutput?: boolean;
   recorder?: CallRecorder;
 }
 
@@ -316,6 +319,7 @@ export class CodexChatModel extends BaseChatModel<CodexCallOptions> {
       Date.now() + settings.timeoutMs,
     );
     let recorder: CallRecorder | undefined;
+    const chatBudget = this.#config.nativeChatOutput ? new ChatOutputBudget() : undefined;
     try {
       const session = await waitForSignal(
         this.#config.session(scope.signal),
@@ -444,6 +448,7 @@ export class CodexChatModel extends BaseChatModel<CodexCallOptions> {
           );
       for await (const event of eventStream) {
         if (event.kind === "text") {
+          chatBudget?.admit(event.text);
           streamedText += event.text;
           const chunk = new ChatGenerationChunk({
             text: event.text,
@@ -452,6 +457,7 @@ export class CodexChatModel extends BaseChatModel<CodexCallOptions> {
           yield chunk;
           await runManager?.handleLLMNewToken(event.text);
         } else {
+          assert(!chatBudget || !event.response.output.some(item => item.type === "function_call"), "Chat supports plain model replies. Use an ordinary workflow for tools or structured output.");
           const diagnostic = validateCompletion(event.response, registry.tools, streamedText, outputContract) === "owned-diagnostic";
           const message = outputMessage(
             event.response,
@@ -461,6 +467,10 @@ export class CodexChatModel extends BaseChatModel<CodexCallOptions> {
             outputContract.kind !== "tools",
             diagnostic,
           );
+          const finalText = typeof message.content === "string" ? message.content : "";
+          assert(!streamedText || finalText === streamedText, "The completed response text differs from its streaming deltas.");
+          const tail = streamedText ? "" : finalText;
+          chatBudget?.admit(tail);
           if (this.#config.replay) {
             const metadata = message.additional_kwargs
               .codex_response as import("./core/codec.js").ReplayMetadata;
@@ -484,15 +494,7 @@ export class CodexChatModel extends BaseChatModel<CodexCallOptions> {
               );
             this.#config.replay.remember(metadata);
           }
-          const finalText =
-            typeof message.content === "string" ? message.content : "";
-          // Completed output is authoritative. A partial stream must never masquerade as success.
-          assert(
-            !streamedText || finalText === streamedText,
-            "The completed response text differs from its streaming deltas.",
-          );
           recorder.complete(normalizeUsage(event.response.usage));
-          const tail = streamedText ? "" : finalText;
           const chunk = new ChatGenerationChunk({
             text: tail,
             message: new AIMessageChunk({

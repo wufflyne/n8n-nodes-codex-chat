@@ -24,9 +24,24 @@ Define an additive versioned output schema, implement a fixed bounded service op
 
 Introduce a deliberate authentic route discriminator and source pin; define request/response/replay contracts and public capability guards. Exercise exact instruction/tool/output/streaming/parser/image/memory/native matrix, malformed terminals and admission ambiguity. No arbitrary provider JSON passthrough. Old opaque history cannot cross account/model/codec/branch identity. A new codec revision must reject incompatible or unproven retained items, call mappings and completed-operation responses; do not infer their codec from the current catalog.
 
-## Repeatable local release
+## Native package build and checks
 
-For the embedded bundled image, first prepare the complete bounded security output described below, then run `CODEX_RELEASE_SECURITY_BUNDLE=/absolute/prepared-output/security npm run release:local` in the project. For the gateway and matched lifecycle image, use the [companion assembly procedure](gateway.md#reproducible-companion-assembly); prepare its locked consumer before running checks. It invokes scoped Docker builds using the exact lockfile, compiles/types/tests, performs a native synthetic router smoke, packs the allowlisted artifact, builds a clean runtime, exports/loads the archive and starts empty disposable volumes. It does not publish, push, touch the existing editor or use real credentials. The built-in smoke is a narrow check; broader native integration and load testing are separate release gates. Review source hashes after a change and rerun the affected checks.
+Use the pinned Node.js 26.12.1 toolchain in an isolated checkout with project-local dependency caches and temporary output. Install the locked development dependencies and optional legacy SDK fixture, then build and check the package:
+
+```sh
+npm ci --ignore-scripts --no-audit --no-fund --cache .npm-cache
+npm ci --prefix integration/consumer --ignore-scripts --no-audit --no-fund --cache "$PWD/.npm-cache"
+CODEX_WIRE_SDK_ROOT="$PWD/integration/consumer/node_modules" npm run check
+npm run typecheck
+mkdir -p artifacts
+npm pack --ignore-scripts --pack-destination artifacts
+```
+
+The SDK fixture is required to run the complete retained gateway regression suite without skips. These package build/check/pack commands do not patch n8n, apply legacy security overlays or publish anything. Native 0.1.1 qualification installs the resulting tarball through the ordinary community loader on an untouched stock host, verifies its exact installed bytes and host peer identities, and exercises the supported native surfaces separately. Keep current encrypted owner/token/reset state apart from source/build output; never restore older credentials to test a code rollback.
+
+## Historical companion image tooling
+
+The retained `release:local` command builds the legacy CUSTOM embedded image with a separately prepared security layer. It is not the native 0.1.1 stock-host release path. First prepare the complete bounded security output through the [companion assembly procedure](gateway.md#reproducible-companion-assembly), then run `CODEX_RELEASE_SECURITY_BUNDLE=/absolute/prepared-output/security npm run release:local` only for that historical variant. The gateway/matched lifecycle image has its own recipe and locked consumer. These tools invoke scoped Docker builds using the exact lockfile, compile/types/tests, perform a native synthetic router smoke, pack the allowlisted artifact, build a clean runtime, export/load the archive and start empty disposable volumes. They do not publish, push, touch the existing editor or use real credentials. The built-in smoke is a narrow check; broader integration and load testing remain separate gates. Review source hashes after a change and rerun affected checks.
 
 Package version comes only from package.json; Codex client compatibility is independently 0.166.0 + pinned commit. Profile/envelope/reset/output schemas are independently versioned. Ajv 8.20.0 and ajv-formats 3.0.1 are exact owned dependencies, installed with scripts ignored. JSON Schema draft-07/2020-12 use local validation without remote refs, coercion/default insertion/property removal/async loading. Schemas are trusted workflow configuration; size/depth limits do not make arbitrary regexes cost-free.
 

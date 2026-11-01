@@ -58,13 +58,14 @@ export class AccountSessionManager {
     tokens: TokenSet,
     label: string,
     signal?: AbortSignal,
+    beforeCommit?: () => Promise<void>,
   ): Promise<void> {
     assert(
       isProfileAccess(access) && access.authority === "administrator",
       "Administrator profile access is required for reconnection.",
     );
     const placeholder = { profileId: access.profileId, bindingSecret: "" };
-    await this.activate(tokens, label, placeholder, placeholder, signal, access);
+    await this.activate(tokens, label, placeholder, placeholder, signal, access, beforeCommit);
   }
 
   prepareNewProfile(): PreparedNewProfile {
@@ -81,11 +82,12 @@ export class AccountSessionManager {
     prepared: PreparedNewProfile,
     tokens: TokenSet,
     label: string,
-    options: { bindingDurable: DurableBinding; signal?: AbortSignal },
+    options: { bindingDurable: DurableBinding; signal?: AbortSignal; beforeCommit?: () => Promise<void> },
   ): Promise<ConnectResult> {
     assert(prepared.mode === "new", "A new-profile activation requires prepared mode.");
     verifyDelivery(options.bindingDurable, prepared.binding);
-    const binding = await this.activate(tokens, label, undefined, prepared.binding, options.signal);
+    const binding = await this.activate(tokens, label, undefined, prepared.binding, options.signal,
+      undefined, options.beforeCommit);
     return {
       binding,
       state: options.signal?.aborted ? "committed_after_cancel" : "connected",
@@ -115,6 +117,7 @@ export class AccountSessionManager {
     selectedBinding: Binding,
     signal?: AbortSignal,
     ownerAccess?: ProfileAccess,
+    beforeCommit?: () => Promise<void>,
   ): Promise<Binding> {
     throwIfAborted(signal);
     assert(
@@ -181,11 +184,13 @@ export class AccountSessionManager {
         verifiedAt: Date.now(),
         ...(verified.display ? { display: verified.display } : {}),
       };
+      // The journal validates family ownership before the caller's durable admission receipt.
+      // Once admitted, local commit or rotating renewal settles independently of cancellation.
       if (profile.tokens.expiresAt <= Date.now()) {
-        const operation = await this.store.rotation.beginBootstrap(profile, previous);
+        const operation = await this.store.rotation.beginBootstrap(profile, previous, beforeCommit);
         await this.completeRotation(profile, operation, profile.generation,
           previous?.tokens.refreshToken === profile.tokens.refreshToken ? previous : undefined);
-      } else await this.store.rotation.register(profile, previous);
+      } else await this.store.rotation.register(profile, previous, beforeCommit);
     });
     return binding;
   }

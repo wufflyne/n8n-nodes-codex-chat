@@ -1,4 +1,9 @@
-import { nativeService } from "../../service/native.js";
+import {
+  connectionOperation,
+  nativeAccount,
+  nativeAccountStatus,
+} from "../../service/native-connections.js";
+import { editorResetCredits, testManagerCredential } from "../../service/native-local.js";
 import {
   NodeConnectionTypes,
   NodeOperationError,
@@ -9,7 +14,6 @@ import {
   type ILoadOptionsFunctions,
   type INodeListSearchResult,
 } from "n8n-workflow";
-import { credentialBinding } from "../../runtime.js";
 import { assert, safeError } from "../../core/errors.js";
 import { executionKey } from "../../core/affinity.js";
 import { nativeContext } from "../../n8n/context.js";
@@ -25,7 +29,25 @@ export class CodexAccount implements INodeType {
     defaults: { name: "Codex Account" },
     inputs: [NodeConnectionTypes.Main],
     outputs: [NodeConnectionTypes.Main],
-    credentials: [{ name: "codexAccount", required: true }],
+    credentials: [
+      { name: "codexAccount", required: true },
+      {
+        name: "codexWireManager",
+        required: true,
+        testedBy: "testManager",
+        displayOptions: {
+          show: {
+            operation: [
+              "startSignIn",
+              "completeSignIn",
+              "cancelSignIn",
+              "reconnect",
+              "importSession",
+            ],
+          },
+        },
+      },
+    ],
     properties: [
       {
         displayName:
@@ -46,14 +68,49 @@ export class CodexAccount implements INodeType {
         default: "checkAccount",
         noDataExpression: true,
         options: [
-          { name: "Check Account", value: "checkAccount" },
-          { name: "Get Limits", value: "getLimits" },
-          { name: "Get Models", value: "getModels" },
+          { name: "Status", value: "checkAccount" },
+          { name: "Start Sign-in", value: "startSignIn" },
+          { name: "Complete Sign-in", value: "completeSignIn" },
+          { name: "Cancel Sign-in", value: "cancelSignIn" },
+          { name: "Reconnect", value: "reconnect" },
+          { name: "Import Session", value: "importSession" },
+          { name: "Refresh Limits", value: "getLimits" },
+          { name: "Refresh Models", value: "getModels" },
           { name: "Get Execution Usage", value: "getExecutionUsage" },
           { name: "List Reset Credits", value: "listResetCredits" },
           { name: "Use Reset Credit", value: "useResetCredit" },
           { name: "Resolve Pending Reset", value: "resolvePendingReset" },
         ],
+      },
+      {
+        displayName:
+          "Device-code login is beta. Enable it in ChatGPT security settings or ask your workspace administrator. Select a saved Account and Manager, run Start Sign-in, use the provider's verification page, then run Complete Sign-in. Reconnect starts an independent sign-in and preserves the original verified account identity.",
+        name: "connectionNotice",
+        type: "notice",
+        default: "",
+        displayOptions: {
+          show: { operation: ["startSignIn", "completeSignIn", "cancelSignIn", "reconnect"] },
+        },
+      },
+      {
+        displayName:
+          "Paste session JSON only in the Manager credential's Advanced Session Import field, then save that credential and run this action. Never put tokens in workflow input or parameters. Clear the optional source field in the credential modal after successful import.",
+        name: "importNotice",
+        type: "notice",
+        default: "",
+        displayOptions: { show: { operation: ["importSession"] } },
+      },
+      {
+        displayName: "Import Format",
+        name: "importFormat",
+        type: "options",
+        default: "codex-auth-json",
+        noDataExpression: true,
+        options: [
+          { name: "Codex Auth JSON", value: "codex-auth-json" },
+          { name: "Explicit Codex Token Set", value: "token-set" },
+        ],
+        displayOptions: { show: { operation: ["importSession"] } },
       },
       {
         displayName: "Include Reset Details",
@@ -115,14 +172,12 @@ export class CodexAccount implements INodeType {
     ],
   };
   methods = {
+    credentialTest: { testManager: testManagerCredential },
     listSearch: {
       async resetCredits(this: ILoadOptionsFunctions): Promise<INodeListSearchResult> {
-        const snapshot = await nativeService().limits(
-          credentialBinding(await this.getCredentials("codexAccount")),
-          { force: true, includeResetDetails: true },
-        );
+        const credits = await editorResetCredits(this);
         return {
-          results: snapshot.resetCredits.entries
+          results: credits
             .filter((e) => e.eligible)
             .map((e) => ({
               name: e.title ?? "Available reset",
@@ -136,19 +191,50 @@ export class CodexAccount implements INodeType {
   async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
     const operation = this.getNodeParameter("operation", 0) as string,
       items = this.getInputData();
+    if (
+      ["startSignIn", "completeSignIn", "cancelSignIn", "reconnect", "importSession"].includes(
+        operation,
+      )
+    ) {
+      assert(items.length === 1, "Connection actions accept one input item only.");
+      try {
+        const result = await connectionOperation(
+          this,
+          operation,
+          this.getNodeParameter("importFormat", 0, "codex-auth-json") as
+            | "codex-auth-json"
+            | "token-set",
+          this.getExecutionCancelSignal(),
+        );
+        return [[{ json: result, pairedItem: { item: 0 } }]];
+      } catch (error) {
+        throw new NodeOperationError(this.getNode(), safeError(error).message);
+      }
+    }
+    if (operation === "checkAccount") {
+      try {
+        const statuses: INodeExecutionData[] = [];
+        for (let i = 0; i < items.length; i++)
+          statuses.push({
+            json: (await nativeAccountStatus(this)) as INodeExecutionData["json"],
+            pairedItem: { item: i },
+          });
+        return [statuses];
+      } catch (error) {
+        throw new NodeOperationError(this.getNode(), safeError(error).message);
+      }
+    }
     assert(
       !["useResetCredit", "resolvePendingReset"].includes(operation) || items.length === 1,
       "Reset actions accept one input item only.",
     );
-    const binding = credentialBinding(await this.getCredentials("codexAccount")),
-      service = nativeService(),
+    const { binding, service } = await nativeAccount(this),
       results: INodeExecutionData[] = [];
     for (let i = 0; i < items.length; i++)
       try {
         let value: unknown;
         const signal = this.getExecutionCancelSignal();
-        if (operation === "checkAccount") value = await service.status(binding);
-        else if (operation === "getExecutionUsage") {
+        if (operation === "getExecutionUsage") {
           value = await service.usage(binding, nativeContext(this));
         } else if (operation === "getModels") {
           const models = await service.models(binding, signal, true),

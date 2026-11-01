@@ -61,6 +61,12 @@ export class ModelCatalog {
     return (await this.snapshot(session, signal, force)).map(cloneModel);
   }
 
+  cached(affinity: string, generation: number): ModelInfo[] {
+    const cached = this.cache.get(`${affinity}:${generation}`);
+    return (cached && cached.until > Date.now() ? cached.models : []).map(cloneModel);
+  }
+  async settleReads() { await Promise.allSettled([...this.pending.values()]); }
+
   /** Internal cache ownership never escapes; public callers receive detached models. */
   private async snapshot(
     session: Session,
@@ -152,7 +158,7 @@ export class ModelCatalog {
     );
     assert(
       model,
-      "The selected model is not in this account catalog. Refresh the model picker and choose an available model.",
+      "The selected model is not in this account catalog. Run Codex Account → Refresh Models and choose an advertised model or its exact ID.",
     );
     return cloneModel(model);
   }

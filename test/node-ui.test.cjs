@@ -6,7 +6,7 @@ const {randomUUID}=require('node:crypto');
 const {ProfileStore}=require('../dist');
 const {profile,rawModel}=require('./helpers.cjs');
 
-test('Native model picker, all capability loaders and credential lifecycle tests use the selected isolated profile',async t=>{
+test('Native editor loaders stay local and explicit refresh populates the selected isolated profile snapshot',async t=>{
  await fs.mkdir('.test-state',{recursive:true,mode:0o700});const dir=await fs.mkdtemp(path.resolve('.test-state/ui-'));
  const prior={dir:process.env.N8N_CODEX_STORE_DIR,key:process.env.N8N_CODEX_STORE_KEY,fetch:global.fetch};
  t.after(async()=>{global.fetch=prior.fetch;for(const [k,v]of [['N8N_CODEX_STORE_DIR',prior.dir],['N8N_CODEX_STORE_KEY',prior.key]])if(v===undefined)delete process.env[k];else process.env[k]=v;await fs.rm(dir,{recursive:true,force:true});});
@@ -14,7 +14,14 @@ test('Native model picker, all capability loaders and credential lifecycle tests
  const binding={profileId:randomUUID(),bindingSecret:'SYNTHETIC_UI_BINDING'};const store=new ProfileStore(dir,Buffer.alloc(32,0x75));await store.write(profile(binding));
  let requests=0;global.fetch=async()=>{requests++;return Response.json({models:[rawModel()]});};
  const {CodexChatModel:Node}=require('../dist/nodes/CodexChatModel/CodexChatModel.node');const node=new Node();
+ const service=require('../dist/service/native').nativeService();
  const ctx={getCredentials:async()=>binding,getNodeParameter:()=>({value:'synthetic-model'})};
+ assert.deepEqual((await node.methods.listSearch.searchModels.call(ctx,'SYNTHETIC')).results,[]);
+ assert.deepEqual((await node.methods.loadOptions.reasoningEfforts.call(ctx)).map(o=>o.value),['']);
+ assert.deepEqual((await node.methods.loadOptions.serviceTiers.call(ctx)).map(o=>o.value),['']);
+ assert.equal(requests,0);
+ await assert.rejects(fs.stat(path.join(dir,'.codex-wire-owner-v2')), {code:'ENOENT'});
+ await service.models(binding,undefined,true);
  const models=await node.methods.listSearch.searchModels.call(ctx,'SYNTHETIC');assert.equal(models.results[0].value,'synthetic-model');
  assert.equal((await node.methods.listSearch.searchModels.call(ctx,'missing')).results.length,0);
  assert.deepEqual((await node.methods.loadOptions.reasoningEfforts.call(ctx)).map(o=>o.value),['','low','high']);

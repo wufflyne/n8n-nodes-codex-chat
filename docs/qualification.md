@@ -1,44 +1,37 @@
-# Qualification and distribution
+# Qualification and compatibility
 
-Codex Wire 0.1.0 targets Linux amd64, Node 26.12.1, n8n 2.45.6, n8n-workflow 2.45.3 and LangChain Core 1.2.8. Standalone Agents use @n8n/agents 0.30.5, AI SDK 7.0.74 and OpenAI provider 4.0.20. [Compatibility metadata](../compatibility.json) and the exact release receipt identify the artifact bytes and qualification scope. Synthetic installed behavior, bounded live observations and public-registry installation are separate checks; historical release results do not qualify changed code.
+The native 0.1.1 release targets the untouched official n8n 2.45.6 image, Node.js 26.12.1, n8n-workflow 2.45.3 and LangChain Core 1.2.8. Its package loads through Community Nodes and uses the host’s actual peer instances. It installs six nodes and two credential types; it applies no host, frontend, lifecycle or security overlay.
 
-## Matched artifacts
+## Evidence scope
 
-The distribution uses one `n8n-nodes-codex-chat-0.1.0.tgz`, matched gateway/n8n images, lifecycle and security manifests, dependency locks and SHA256 checksums. Verify checksums and loaded image IDs before deployment. Keep code backups separate from the latest rotating-token state. Synthetic provider images, qualification credentials and task-only account-preservation tooling are excluded from public artifacts.
+Synthetic qualification covers native saved credentials and workflows, encrypted setup and binding delivery, owner exclusivity and drain, stale credential saves, cold restarts, connection cancellation/capture/uncertainty, explicit imports, local editor reads and native model execution. Each release receipt identifies the exact package digest and installed-file comparison. Stock n8n normalizes dependency metadata in the installed package.json; this is recorded separately from byte-identical installed files.
 
-The npm package installs four native nodes; it never starts a gateway or patches host dependencies automatically. The complete companion build requires the source checkout and the [separate security layer](security.md). Native community installation on that image must preserve the actual host LangChain/n8n-workflow object identities, without private peer copies or community-root peer symlinks.
+A current package test pass does not establish live subscription entitlement, provider availability, model quality, token savings or compatibility with arbitrary n8n versions. No real account is used in the current release’s native qualification. The final code baseline passes 444 automated tests without skips; the 51 focused native tests are included in that total. Documentation-only packaging is checked against the tested compiled bytes. Earlier checkpoint tests are not silently attributed to later changed runtime bytes.
 
-Artifact variants remain distinct. The bounded build's `integration/qualification/Dockerfile.n8n` installs the lifecycle/security overlays and starts with an empty custom-extension path; Agents-only and subsequent community-loader runs qualify it separately. The root `Dockerfile.n8n` used by `release:local` builds the legacy CUSTOM embedded image with security patches and no standalone lifecycle overlay. Its release manifest explicitly labels that variant. Tags, helper locations and namespaces require their matching receipt; a native CUSTOM smoke cannot qualify an Agents companion or community installer.
+The final installed pass includes 15 saved-workflow functional cases, 13 native Codex-parser cases, 12 installed structured-adapter component cases, actual two-turn private Chat with memory, guarded refusal and recovery, and six unsupported Chat graph checks. Account journeys and explicit reset/renewal/reconciliation cases preserve provider-side counters and unknown outcomes. Component API tests are reported separately from saved native workflow executions.
 
-## Finite acceptance surfaces
+The controlled final workload offers concurrency 1, 8 and 32 for 30 seconds each with 250 ms provider delay. It completes 74, 382 and 416 invocations, with zero errors or unknowns. End-to-end throughput is 2.45, 12.55 and 13.13 successful invocations per second; driver-observed p95 latency is 418, 815 and 2709 ms. A separate 80-call burst completes all 80. These are measurements of the bounded stand and its durable synthetic provider, not product capacity or provider performance claims. Native execution timing and both containers’ resources are recorded separately. Both admitted cancellations settle with exactly two effects, a fresh503 is followed by a successful fresh request, and120.193 seconds idle produce zero unsolicited effects. Samples show no OOM kills. n8n averages about1.96/1.93 CPU cores in the8/32 cells against its2CPU limit; the provider averages0.20/0.22 cores against0.5. Its growing durable effect ledger and driver polling also contribute to end-to-end measurements. Maximum observed main-process RSS in those cells is646/944 MiB for n8n and114/118 MiB for the provider.
 
-| Surface | Required evidence |
+## Native acceptance surfaces
+
+| Surface | Qualification scope |
 | --- | --- |
-| Native workflows | Embedded/remote × Standard/Lite; tools, memory, parser/chain/extractor/classifier, Router, account operations, photos and native image bytes |
-| Standalone Agents | Both codecs × stored/stateless × streaming/nonstreaming; actual loaded host turns, helpers, checkpoint/retry, observer/reflector, episodic memory and saved/inline foreground/background children |
-| Accounts and continuity | Exact-token ownership, raw-success capture and local promotion, same/omitted replacement epochs, legacy migration, 32-profile order, shared two-slot account limit, quota-only fresh fallback and permanent branch pins |
-| Safety and privacy | Invalid reset preflight, no executable malformed terminal, protected console/Origin/CSRF, device pending/cancel, explicit store:false canaries and no idle polling |
-| Faults and resources | Admission/overload, restart, actual SQLite FULL separately from injected ENOSPC, graceful drain separately from forced-stop fences, current-state transfer and old-binary refusal |
-| Distribution | Source/dependency/type differential, complete image including OS/all package copies, installed peers, same-origin cached editor transition, exact tarball/image lineage |
+| Setup and accounts | Native installation, original Manager identity, encrypted binding delivery, sign-in/import/reconnect, local Status/Test and restart recovery |
+| Models and workflows | Responses and Lite codecs, streaming, actual Code Tool effects, Codex parser, native memory, fresh-invocation Router, exact photo and generated image bytes |
+| Account safety | Exact identity and token-family ownership, durable success capture, missing-journal refusal, reset acknowledgement/idempotency and unknown outcomes |
+| Resources and failures | Bounded concurrency, cancellation, rejected/uncertain requests, owner drain, restart, idle traffic, CPU and memory observations |
+| Distribution | Exact source/package/dependency provenance, genuine host peer identities, current advisory review and public registry installation |
 
-Native opaque metadata v2 binds the account, exact model and known codec. Old v1 memory is preserved and explicitly rejected, with export/new-session guidance. Retained standalone history also keeps connection/account/model/codec/branch proof. No guessed migration or silent history removal is permitted.
+The qualified private Chat Hub workflow agent uses one Agent3, one fixed Codex model and optional memory. The package refuses independent tools, output parsers, Router, custom main outputs and public Chat before provider work. Actual assistant Markdown rendering, an over-budget refusal and a fresh healthy recovery are exercised. Stock Chat may mask detailed errors; open the native execution for the controlled cause.
 
-Episodic memory uses a separate compatible embedding provider; Codex Wire does not implement embeddings. The pinned standalone runtime has no user fork/regenerate endpoint. Independent branch isolation does not establish such a UI.
+Chat Hub workflow agents use the normal workflow execution path and a connected Account credential. Their native selector/message evidence is distinct from the separate standalone Agents builder. Full standalone host-attested pooling and automatic native OpenAI-credential delivery are unsupported on stock n8n.
 
-The Agents source differential retains six known baseline diagnostics and introduces none. The broader lifecycle/security check uses exact restored published declarations and records original-dependency, updated-dependency and patched-source results separately. It is not a clean full upstream monorepo typecheck.
+## Historical integrations
 
-## Resource and performance interpretation
+[Legacy qualification](legacy-qualification.md) preserves the 0.1.0 companion/gateway procedures and their scope. Those custom images, lifecycle overlays and historical measurements do not qualify the native stock path. Previous offline SDK metadata delays and watchdog failures remain historical evidence; later bounded runs do not turn them into uninterrupted passes.
 
-The synthetic lab uses gateway 1 CPU/512 MiB, n8n 2 CPU/2 GiB and fixture 0.5 CPU/128 MiB, with external runtime egress disabled. Final load gates include 120-second steady runs at 1/8/32 offered concurrency, eight held requests plus a 70-request burst against the 64-entry queue, and 120 seconds idle. Reports retain actual RSS, CPU, event-loop delay, queue outcomes and provider-attempt counts.
+Stock Simple Memory is process-local. After a cold restart the same saved Chat UI retains earlier messages while the observed provider context contains only the new user message. Final opaque assistant provenance is not reconstructed. Keep account/workflow/session memory separate.
 
-Matched comparisons preserve payload, settings, model, tool count and provider delays. A candidate p95 exceeding baseline by both 2× and 50 ms, or idle RSS growth above 64 MiB, requires investigation and an explicit disposition. A host-side journal capacity test does not prove the gateway cgroup can promote a near-64 MiB journal while admitted request memory is held; that boundary remains a separate physical gate.
-
-SQLite FULL must use an actual database page limit. Injected filesystem errors are labeled as injection; the host disk is never filled. A forced stop that retains its owner fence is a safety result, not a successful graceful shutdown. No synthetic timing establishes model quality, live entitlement or subscription/cache savings.
-
-## Deliberate limits
-
-Assistant Chat Completions, Codex embeddings, public image routes, hosted provider tools, direct PDF/audio/video, image editing, unknown codecs, distributed/multiworker ownership and purchases/top-ups are unsupported. Native image generation is an explicit workflow action. External tool side effects receive no general exactly-once guarantee.
-
-Live evidence is reported by exact account entitlement and codec. Provider limitations may constrain those observations; they never excuse credential-safety failures. Production publication and deployment require the final accepted artifact receipt.
+Native operation supports one local execution process with private local persistence. Queue/multi-main execution, shared network filesystems, Codex embeddings, Chat Completions, image editing, unsupported hosted tools and purchases/top-ups are outside the supported scope. External tool side effects have no general exactly-once guarantee.
 
 By [wufflyne](https://wufflyne.com).

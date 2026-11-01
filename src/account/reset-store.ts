@@ -12,6 +12,7 @@ import { assert, CodexError } from "../core/errors.js";
 import { delay, throwIfAborted } from "../core/http.js";
 import type { Identity } from "../core/types.js";
 import type { ResetOutcome } from "./types.js";
+import type { OwnerLock } from "../service/native-locks.js";
 export interface ResetIntent {
   redeemRequestId: string;
   creditId: string;
@@ -60,7 +61,7 @@ export class ResetStore {
   readonly directory: string;
   private readonly key: Buffer;
   private readonly scopeKey: Buffer;
-  constructor(directory: string, master: Buffer) {
+  constructor(directory: string, master: Buffer, private readonly ownerLock?: OwnerLock) {
     this.directory = path.join(directory, "resets");
     assert(master.length === 32, "The reset store key is invalid.");
     this.key = createHmac("sha256", master)
@@ -118,6 +119,7 @@ export class ResetStore {
     signal?: AbortSignal,
   ): Promise<T> {
     await this.prepare();
+    if (this.ownerLock) return this.ownerLock(`reset:${name}`, async () => { throwIfAborted(signal); return action(); });
     const filename = path.join(this.directory, `${name}.lock`),
       deadline = Date.now() + 10000;
     while (true) {

@@ -22,6 +22,31 @@ interface StructuredModel {
     config: Partial<CodexCallOptions>,
   ): Runnable<BaseLanguageModelInput, AIMessageChunk, CodexCallOptions>;
 }
+/** Refuse sparse parser results without changing legitimate Zod transformations. */
+function assertDenseArrays(value: unknown): void {
+  const pending = [{ value, depth: 0 }], seen = new WeakSet<object>();
+  let remaining = 65536;
+  while (pending.length) {
+    const current = pending.pop()!;
+    assert(current.depth <= 64, "The structured parser result exceeds its inspection depth.");
+    const item = current.value;
+    if (item === null || typeof item !== "object" || seen.has(item)) continue;
+    seen.add(item);
+    if (Array.isArray(item)) {
+      for (let index = 0; index < item.length; index++) {
+        assert(--remaining >= 0, "The structured parser result exceeds its inspection budget.");
+        assert(Object.hasOwn(item, index), "The structured parser returned a sparse array.");
+        pending.push({ value: item[index], depth: current.depth + 1 });
+      }
+    } else {
+      for (const key in item) {
+        if (!Object.hasOwn(item, key)) continue;
+        assert(--remaining >= 0, "The structured parser result exceeds its inspection budget.");
+        pending.push({ value: (item as Record<string, unknown>)[key], depth: current.depth + 1 });
+      }
+    }
+  }
+}
 export function structuredRunnable<T extends Record<string, unknown>>(
   model: StructuredModel,
   schema: unknown,
@@ -116,6 +141,7 @@ export function structuredRunnable<T extends Record<string, unknown>>(
         const checked = await interopSafeParseAsync(schema, value);
         assert(checked.success, "The structured response did not satisfy its Zod schema.");
         value = checked.data;
+        assertDenseArrays(value);
       } else assert(validate(value), "The structured response did not satisfy its JSON schema.");
       parsed = record(value) as T;
     } catch {

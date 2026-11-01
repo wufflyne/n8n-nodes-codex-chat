@@ -62,6 +62,7 @@ export async function closeRuntimeOwner(resources: ReturnType<typeof runtimeFrom
 }
 
 let singleton: ReturnType<typeof runtimeFromEnvironment> | undefined;
+export function cachedRuntime() { return singleton; }
 export function runtime() {
   return (singleton ??= runtimeFromEnvironment());
 }

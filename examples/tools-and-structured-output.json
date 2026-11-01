@@ -64,15 +64,14 @@
     },
     {
       "id": "parser",
-      "name": "Structured Output Parser",
-      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
-      "typeVersion": 1.3,
+      "name": "Codex Output Parser",
+      "type": "n8n-nodes-codex-chat.codexJsonOutputParser",
+      "typeVersion": 1,
       "position": [
         650,
         240
       ],
       "parameters": {
-        "schemaType": "manual",
         "inputSchema": "{\"type\": \"object\", \"properties\": {\"total\": {\"type\": \"number\"}, \"unit\": {\"type\": \"string\"}, \"complete\": {\"type\": \"boolean\"}}, \"required\": [\"total\", \"unit\", \"complete\"], \"additionalProperties\": false}"
       }
     }
@@ -111,7 +110,7 @@
         ]
       ]
     },
-    "Structured Output Parser": {
+    "Codex Output Parser": {
       "ai_outputParser": [
         [
           {

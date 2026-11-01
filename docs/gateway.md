@@ -1,8 +1,10 @@
 # Codex Wire gateway and standalone Agents
 
+This is the retained guarded 0.1.0 gateway/console and matched-host integration. Native 0.1.1 setup uses stock n8n credentials/nodes instead. Full original host-attested pooling and automatic native OpenAI-credential delivery are unsupported on stock n8n; historical fixed-endpoint instructions are not a complete zero-transfer GUI proof.
+
 Version 0.1.0 provides an explicit account owner service with a shared token-ownership journal. The same Codex subscription profiles can serve native n8n workflows and standalone n8n Agents. Platform API credentials are never used as a fallback. The gateway does not execute tools; n8n remains responsible for tool execution and approvals.
 
-The [qualification guide](qualification.md) describes the tested installation and its limits. The included isolated fixture uses synthetic accounts and provider responses. Real entitlement, renewal, model quality and reset effects require separate live verification.
+The [qualification guide](legacy-qualification.md) describes the tested installation and its limits. The included isolated fixture uses synthetic accounts and provider responses. Real entitlement, renewal, model quality and reset effects require separate live verification.
 
 ## Choose a mode
 
@@ -72,7 +74,7 @@ Use a fresh build directory and retain earlier artifacts for rollback. Source/de
 
 For the matched n8n companion, first obtain the exact n8n `n8n@2.45.6` source archive and verify SHA256 `897f9cc8b004d2bd15aeb37a4ce053ba45f2d7a7810a30203ea1bf8226d6822d`. Apply `integration/n8n-2.45.6/model-request-context.patch` and then `integration/security/n8n-security.patch` to an isolated copy. Both compilers verify their per-file manifests. Set absolute `CANDIDATE_ROOT`, `UPSTREAM_ROOT` and `QUALIFICATION_ROOT`, plus an operator-selected `BUILD_RESOURCE_PREFIX` and fresh `BUILD_CHECKPOINT`, then run `integration/scripts/bounded-build.sh`. Review its exact mounts/resource/network scope before using Docker. It prepares the tarball, lifecycle output, locked security tree and signed offline OS inputs. Keep the full output directory and build receipts together.
 
-The generated `n8n.Dockerfile` and `gateway.Dockerfile` assemble from that output with `docker build --network=none`; the fixture Dockerfile is synthetic qualification only. The n8n companion includes the lifecycle and security overlays and initially loads no Codex nodes: its custom-extension path is empty. Install the tarball separately through the community loader for native nodes, retaining the npm namespace and actual community helper path. Record the recipe, variant and immutable image ID in the release receipt. Never substitute the lifecycle patch alone for the complete matched security layer. See [security scope](security.md).
+The generated `n8n.Dockerfile` and `gateway.Dockerfile` assemble from that output with `docker build --network=none`; the fixture Dockerfile is synthetic qualification only. The n8n companion includes the lifecycle and security overlays and initially loads no Codex nodes: its custom-extension path is empty. Install the tarball separately through the community loader for native nodes, retaining the npm namespace and actual community helper path. Record the recipe, variant and immutable image ID in the release receipt. Never substitute the lifecycle patch alone for the complete matched security layer. See [security scope](legacy-security.md).
 
 The root `Dockerfile.n8n` and `release:local` command produce a separate legacy CUSTOM embedded image. That route requires `CODEX_RELEASE_SECURITY_BUNDLE` pointing at the bounded output's `security` directory and verifies it before building, but does not install the standalone Agents lifecycle overlay. Its `/opt/n8n-codex` helper location and CUSTOM workflow namespace do not apply to community installation on the companion. The conventional `codex-wire-n8n:0.1.0` tag must always be interpreted with its exact release receipt; do not replace one variant with the other under an existing tag.
 

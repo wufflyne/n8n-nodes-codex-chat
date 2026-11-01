@@ -22,6 +22,57 @@ const schema = {
   required: ["value"],
   additionalProperties: false,
 };
+for (const method of ['functionCalling', 'jsonSchema']) {
+  test(`Structured ${method} refuses inherited async Zod tuple corruption without a repair generation`, async () => {
+    const z = require('zod/v4');
+    const owned = z.object({ items: z.tuple([
+      z.string().refine(async () => true),
+      z.string().refine(async () => true),
+    ]).meta({ minItems: 2, maxItems: 2 }) });
+    let calls = 0;
+    const fetchImpl = mockFetch(async request => {
+      calls++;
+      return sseResponse([complete(output('', { output: method === 'jsonSchema'
+        ? output('{"items":["a","b"]}').output
+        : [{ type: 'function_call', call_id: `tuple-${calls}`, name: request.tools[0].name, arguments: '{"items":["a","b"]}' }],
+      }))]);
+    });
+    const model = new CodexChatModel({ model: 'synthetic-model', session: async () => session(), catalog: new ModelCatalog(fetchImpl), transport: new ResponsesTransport(fetchImpl) });
+    const result = await model.withStructuredOutput(owned, { method, includeRaw: true }).invoke('Synthetic');
+    assert.equal(result.parsed, null);
+    assert.equal(result.raw.response_metadata.structuredParserStatus, 'invalid_output');
+    assert.equal(calls, 1);
+    assert(result.raw);
+    await assert.rejects(model.withStructuredOutput(owned, { method }).invoke('Synthetic'), error => error.category === 'protocol');
+    assert.equal(calls, 2); // One generation per explicit invocation, including the refusal.
+  });
+  test(`Structured ${method} preserves valid async Zod transformations and class values`, async () => {
+    const z = require('zod');
+    class Label { constructor(value) { this.value = value; } }
+    const owned = z.object({
+      value: z.string().transform(async value => new Label(value)),
+      when: z.string().transform(value => new Date(value)),
+      items: z.array(z.string().refine(async () => true)),
+    });
+    let calls = 0;
+    const value = { value: 'ordinary', when: '2026-11-01T00:00:00.000Z', items: ['a', 'b'] };
+    const fetchImpl = mockFetch(async request => {
+      calls++;
+      return sseResponse([complete(output('', { output: method === 'jsonSchema'
+        ? output(JSON.stringify(value)).output
+        : [{ type: 'function_call', call_id: 'valid-async', name: request.tools[0].name, arguments: JSON.stringify(value) }],
+      }))]);
+    });
+    const model = new CodexChatModel({ model: 'synthetic-model', session: async () => session(), catalog: new ModelCatalog(fetchImpl), transport: new ResponsesTransport(fetchImpl) });
+    const result = await model.withStructuredOutput(owned, { method }).invoke('Synthetic');
+    assert(result.value instanceof Label);
+    assert.equal(result.value.value, 'ordinary');
+    assert(result.when instanceof Date);
+    assert.equal(result.when.toISOString(), value.when);
+    assert.deepEqual(result.items, ['a', 'b']);
+    assert.equal(calls, 1);
+  });
+}
 for (const lite of [false, true])
   for (const method of ["functionCalling", "jsonSchema"])
     test(`Structured ${method} validates locally and performs one generation (${lite ? "Lite" : "standard"})`, async () => {

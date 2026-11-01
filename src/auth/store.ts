@@ -14,6 +14,7 @@ import { CodexError, assert, record } from "../core/errors.js";
 import { delay } from "../core/http.js";
 import { PROVIDER, type Profile } from "../core/types.js";
 import { RotationStore } from "./rotation-store.js";
+import type { OwnerLock } from "../service/native-locks.js";
 
 export function bindingHash(secret: string): string {
   return createHash("sha256").update(secret).digest("hex");
@@ -37,6 +38,7 @@ export class ProfileStore {
     key: Buffer,
     private readonly ensureOwner?: () => Promise<void>,
     readonly readOnly = false,
+    readonly ownerLock?: OwnerLock,
   ) {
     assert(path.isAbsolute(directory), "N8N_CODEX_STORE_DIR must be an absolute path.");
     assert(key.length === 32, "N8N_CODEX_STORE_KEY must be a base64-encoded 32-byte key.");
@@ -91,7 +93,7 @@ export class ProfileStore {
     const expected = Buffer.from(profile.bindingHash, "hex");
     assert(
       expected.length === supplied.length && timingSafeEqual(expected, supplied),
-      "The account binding is invalid. Recreate the n8n credential from the profile binding file.",
+      "The account binding is invalid. Select its original Account credential and Manager. Legacy installations must retain their existing protected binding; do not generate a replacement.",
     );
     return profile;
   }
@@ -197,6 +199,7 @@ export class ProfileStore {
   async locked<T>(id: string, action: () => Promise<T>, timeoutMs = 30000): Promise<T> {
     assert(!this.readOnly, "This profile store is open for local read-only diagnostics.");
     await this.prepare();
+    if (this.ownerLock) return this.ownerLock(`profile:${profileId(id)}`, action);
     const lock = path.join(this.directory, `${profileId(id)}.lock`);
     const deadline = Date.now() + timeoutMs;
     while (true) {

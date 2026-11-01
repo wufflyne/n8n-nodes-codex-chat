@@ -1,200 +1,62 @@
-# Installation
+# Native installation and account management
 
-Install version 0.1.0 from the n8n community panel, npm, or the matching release tarball. For standalone Agents and shared account ownership, see [the gateway guide](gateway.md). Existing embedded workflows keep their node IDs and credentials. Verify the release checksums before using offline artifacts.
+Use an existing trusted self-hosted n8n instance. The pinned tested runtime is n8n 2.45.6, n8n-workflow 2.45.3, LangChain Core 1.2.8 and Node.js 26.12.1. Community and unverified packages must be allowed by the operator. Normal setup uses the native GUI; [legacy installation](legacy-install.md) applies only to already configured older deployments.
 
-One npm package installs all four Codex Wire nodes and the shared **Codex Account** credential. Use a trusted self-hosted n8n instance. This independent, experimental integration is not a verified community node and does not provide n8n Cloud support.
+## Install and keep one service active
 
-The pinned stack is n8n `2.45.6`, n8n-workflow `2.45.3`, LangChain Core `1.2.8` and Node.js `26.12.1`. One execution process is supported; queue/multiworker mode is outside this release.
+1. Open **Settings → Community Nodes → Install** and install `n8n-nodes-codex-chat@0.1.1`, accepting n8n's community-code notice. See [n8n's GUI installation guide](https://docs.n8n.io/integrations/community-nodes/installation/gui-install/).
+2. Create a workflow named **Codex Wire Setup** and add **Codex Wire Service**, or import the supplied [setup workflow](../examples/codex-wire-setup.json).
+3. In its native selector create **Codex Wire Manager**. Choose a long, unique Manager Passphrase: at least 12 characters and at most 1024 UTF-8 bytes. Save the credential, save the workflow, then activate/publish it.
+4. Use the Manager credential's **Test** to check local readiness. Activation/deactivation acknowledgements describe publication; actual startup and drain may finish later. A stopping/inactive service is unavailable for new account work.
 
-## Install from the n8n panel
+Use one Manager for this n8n instance and multiple Accounts under it. Keep the service workflow active. Sharing this Manager is deliberate account-administration delegation; an Account credential alone does not authorize connection management. Keep the original credential and passphrase unchanged. Creating another credential with the same name/passphrase cannot replace the permanent owner ID.
 
-1. Sign in as an Owner or Admin and open **Settings → Community Nodes**.
-2. Choose **Install** and enter `n8n-nodes-codex-chat@0.1.0`.
-3. Acknowledge the community-code notice and install.
+The existing persisted n8n data directory contains the plugin's private `codex-wire` subdirectory. n8n encrypts the Manager passphrase and runtime bindings. The passphrase authenticates a private random-key wrap; a hidden root-key cache is recoverable after a stale credential-modal save. No plugin key, profile directory, environment variable or manual secret transfer is required. Preserve n8n's existing persistence and credential-encryption configuration; the plugin never reads its encryption key or a global Codex login.
 
-**Codex Chat Model**, **Codex Account**, **Codex Account Router** and **Codex Image** appear together. Community packages must be enabled, unverified packages allowed, and package loading not prevented by server configuration. See [n8n's installation guide](https://docs.n8n.io/integrations/community-nodes/installation-and-management/gui-installation.md) and [package settings](https://docs.n8n.io/hosting/configuration/environment-variables/nodes.md).
+## Connect and use an account
 
-Installation and account authorization are separate steps. Configure private account storage before linking an account or executing a model node.
+In a separate ordinary workflow add **Codex Account**. Select **Start Sign-in**, create/save a named **Codex Account** credential, leave Advanced Binding Mode managed, and select the original Manager credential. Execute once. Only the provider verification URL, public user code, expiry and next action are returned. Open that URL, authorize your account, then execute **Complete Sign-in**. Waiting does not hold a workflow open or poll in the background; each explicit completion respects the provider interval and expiry.
 
-## Manual npm installation
+Device-code login is beta. Enable it in personal ChatGPT security settings or obtain workspace-administrator permission where required. [Official provider guidance](https://learn.chatgpt.com/docs/auth) is authoritative for availability. Synthetic testing does not prove live consent or subscription entitlement.
 
-Run this as the n8n service user, inside its container or deployment environment. Use the actual community directory if your instance changes the default n8n user folder.
+Attach **Codex Chat Model** to a native AI Agent/chain and select the connected Account. Run **Refresh Models** in Codex Account to populate the local catalog, then select an advertised model or its exact ID. Capability/reasoning/tier/verbosity pickers only read a local snapshot; an empty/expired list needs an explicit refresh. Execution validates current catalog membership, exact model and known codec. It does not guess a fallback model or setting.
 
-```sh
-mkdir -p ~/.n8n/nodes
-cd ~/.n8n/nodes
-npm install --omit=dev --legacy-peer-deps --ignore-scripts \
-  --no-audit --no-fund n8n-nodes-codex-chat@0.1.0
-```
+Use **Status** and credential **Test** for local observations. They do not sign in, renew, reset or infer. **Refresh Models**, **Refresh Limits**, **List Reset Credits** and execution are explicit operations and may renew an eligible managed session. Read-only legacy remote pickers use bounded local snapshots obtained by explicit refresh; they do not silently contact the owner/provider while browsing.
 
-Restart n8n afterward. For an offline installation, replace the package name with an explicit local path to `n8n-nodes-codex-chat-0.1.0.tgz`. This follows [n8n's manual installation layout](https://docs.n8n.io/integrations/community-nodes/installation-and-management/manual-installation.md).
+## Chat in n8n
 
-The plugin resolves the host's exact `@langchain/core` and `n8n-workflow` objects. The pinned n8n loader supplies host search paths through `NODE_PATH`. Do not install a second LangChain copy to silence a peer warning. Other layouts need a compatibility check.
+Import [Codex Wire Chat](../examples/chat-hub.json) through the workflow menu. Open Codex Chat Model, select one connected Account credential, and choose a model from its refreshed catalog. The workflow contains no Manager credential or account-management action.
 
-## Configure account storage
+In Chat Trigger, keep **Make Chat Publicly Available** off and **Make Available in n8n Chat Hub** on. Keep **Enable Streaming** on in AI Agent, then save and publish the workflow. Open **Chat**, start a new chat and select **Codex Wire** under Workflow agents. If Chat is hidden, an instance owner can enable it under **Settings → Chat**. These are standard n8n controls; no provider API key is needed for this workflow agent.
 
-The following examples use the official Linux n8n container, its persistent `/home/node/.n8n` directory, and a Compose service named `n8n`. Keep your existing service name, mounts and other settings when adapting them.
+The template attaches Simple Memory with a ten-turn window. n8n scopes that memory by workflow and the chat session ID; the template adds a fixed account namespace. Keep one Account credential on this workflow. For another account, duplicate the workflow and start a new chat. If you intentionally replace the account in the same workflow, change the memory namespace and begin a new chat first. Never route an existing conversation across accounts. Simple Memory is process-local and does not preserve final assistant opaque provider metadata; it does not provide restart-safe tool continuation.
 
-Invoke the installed account helper directly:
+Only share this runtime workflow with the intended users through n8n's normal workflow/project controls. Keep the Service and account-management workflows private. Sharing and dedicated Chat user roles depend on your n8n edition. See [n8n's Chat Hub guide](https://docs.n8n.io/build/ways-of-building-workflows/chat-hub.md).
 
-```sh
-docker compose exec n8n \
-  node /home/node/.n8n/nodes/node_modules/n8n-nodes-codex-chat/dist/cli.js --help
-```
+Chat Hub workflow agents are separate from the standalone **Agents** builder and personal provider agents. This template does not supply a native OpenAI credential, embeddings or standalone account pooling.
 
-n8n's registry installer disables executable links, so a command shim is not assumed. Read-only status can run alongside n8n. Embedded device login, import, reconnect and recovery require the sole workflow owner to be stopped; a second helper cannot acquire its store lock.
+## Reconnect, cancel and import
 
-### Create a key for a new store
+**Cancel Sign-in** stops a waiting attempt. It does not disconnect an established account or erase an uncertain token exchange. **Reconnect** begins an independent sign-in while preserving the original binding and verified identity; choosing another account is refused. Create a separate Account credential and memory scope for another identity.
 
-**Skip key generation when upgrading an existing store. Reuse its key.** This sequence refuses an existing host key file, creates a temporary key inside the container and copies it into a private host directory. It never prints the key.
+Stopping a workflow is separate from Cancel Sign-in. Cancellation is checked before queued admission and provider dispatch, and through activation's precommit checks. A dispatched rotating exchange/renewal is captured and settled; cancellation never replays it or rolls a committed generation backward. Check local Status/Complete Sign-in afterward for the actual durable outcome.
 
-```sh
-(
-  set -eu
-  test ! -e secrets/runtime.env
-  test ! -L secrets/runtime.env
-  test ! -L secrets
-  mkdir -p secrets
-  chmod 0700 secrets
+For advanced manual import, paste session JSON only into the Manager credential's **Advanced Session Import** password field, save it, choose **Import Session** and the correct format in Codex Account, then execute. Supported formats are the existing Codex auth JSON (`auth_mode: chatgpt`, `tokens`) and explicit Codex token set with matching provider/client ID. API keys, refresh-only input and unsupported fields are rejected. Use an independent authorized session that another client will not keep renewing. Identity is verified before expired-session renewal or reconnection.
 
-  docker compose exec n8n sh -c \
-    'umask 077; mkdir -p /tmp/codex-wire-key'
-  docker compose exec n8n \
-    node /home/node/.n8n/nodes/node_modules/n8n-nodes-codex-chat/dist/cli.js \
-    keygen --output /tmp/codex-wire-key/runtime.env
-  docker compose cp n8n:/tmp/codex-wire-key/runtime.env ./secrets/runtime.env
-  chmod 0600 secrets/runtime.env
-)
-```
+Never put tokens or import JSON in workflow input, parameters or static data. An input rejected before admission can be corrected in the same credential field. Once an import is admitted, its receipt and any uncertain renewal stay fenced; do not replace that input to bypass recovery. Repeating the same completed import is idempotent. Clear the optional import source in the native Manager modal afterward, retaining the original passphrase. The application does not promise an automatic clearing write that could overwrite a concurrent credential edit.
 
-The helper also refuses an existing temporary output. Keep the host key outside the profile store and version control. Protect n8n's own encryption configuration separately.
+Completed/cancelled/expired reconnect history keeps only bounded recent metadata. Unresolved captures and unknown exchanges remain retained and cannot be retried or silently discarded. A genuine unresolved-history/storage limit leads to a separate Account credential and separate conversation memory, rather than an invented maintenance command or erased uncertainty.
 
-### Set the runtime environment
+## Restart and recovery
 
-Merge this into your existing service, retaining its current volumes and environment files:
+The service holds OS-backed SQLite leases until admitted operations, rotating renewals, journal writes and detached reads have settled. New admission stops during close. Process death releases the OS lock; the same saved service workflow reopens the same wrapped root and current journals. Both older owner paths stay permanently fenced. No PID/age-based lock stealing occurs. Only one local execution process and supported local filesystem are qualified; queue/multi-main and shared-network-filesystem ownership are unsupported.
 
-```yaml
-services:
-  n8n:
-    env_file:
-      - ./secrets/runtime.env
-    environment:
-      N8N_CODEX_STORE_DIR: /home/node/.n8n/codex-wire/profiles
-```
+A captured successful exchange can finish locally with **Complete Sign-in** after restart, without another token POST. An exchange/renewal with an unknown outcome is not replayed: use independent **Reconnect**. Missing established journals/claims/wraps and wrong passphrases fail closed. Keep latest state, the original Manager credential and current n8n persistence together. Do not restore old token snapshots, delete fences, regenerate a root, or replace a lost Manager with a same-name credential.
 
-```sh
-docker compose up -d n8n
-```
+Legacy credentials keep their original fields and saved node/operation IDs. Advanced Binding Mode exposes an established legacy binding form. Configured legacy embedded/remote use remains separate; native setup refuses in-place adoption if it cannot prove exclusive legacy handover. The retained helper/console and patched companion are historical compatibility surfaces, not prerequisites for a new native setup.
 
-`N8N_CODEX_STORE_KEY` is a base64-encoded 32-byte key. `N8N_CODEX_STORE_DIR` must be a private writable directory on persistent storage. The example keeps profiles and bindings in n8n's data volume while the key stays in the host secret file. Never store the master key inside the profile directory or dump the resolved environment into logs.
-
-## Link an account
-
-For embedded mode, use a maintenance window. Pause triggers and new workflow admissions, wait for active executions to settle, and retain the current immutable image ID/package version. Keep the Compose service image pinned and unchanged throughout this sequence. The account helper must inherit the same service user, installed community directory, persistent volume and protected environment/key. Do not use a fresh container with an empty volume or a different package version.
-
-```sh
-# Create only the binding directory while the service is available.
-docker compose exec n8n sh -c \
-  'umask 077; mkdir -p /home/node/.n8n/codex-wire/bindings'
-# After active executions have drained, stop the sole owner.
-docker compose stop -t 120 n8n
-# Compose inherits the same image, service user, mounts and protected environment.
-docker compose run --rm --no-deps --pull never --entrypoint node n8n \
-  /home/node/.n8n/nodes/node_modules/n8n-nodes-codex-chat/dist/cli.js \
-  device-login --offline --label 'Automation' \
-  --binding-output /home/node/.n8n/codex-wire/bindings/automation.json
-# Restart after successful helper completion and verify local status.
-docker compose up -d --no-deps n8n
-docker compose exec n8n \
-  node /home/node/.n8n/nodes/node_modules/n8n-nodes-codex-chat/dist/cli.js \
-  status --binding /home/node/.n8n/codex-wire/bindings/automation.json
-```
-
-Follow the terminal's login link and one-time code. Device login must be enabled where required by [Codex authentication settings](https://learn.chatgpt.com/docs/auth). If the helper reports an owner fence, stop and inspect all possible store users; never delete a lock because of its age. A forced process stop can leave a deliberate fence. Preserve the store and any delivered binding when an operation fails; use the recovery procedure below instead of repeating an uncertain token renewal. Resume workflow admissions after local status and a harmless workflow succeed.
-
-Copy the binding from the persistent service volume into your existing private host directory:
-
-```sh
-docker compose cp \
-  n8n:/home/node/.n8n/codex-wire/bindings/automation.json ./secrets/automation.json
-chmod 0600 secrets/automation.json
-```
-
-Open it locally and enter `profileId` and `bindingSecret` in an n8n **Codex Account** credential. Tokens never enter workflow fields. The helper writes and syncs the complete binding before activation; an interrupted initial import may need that binding for recovery.
-
-For gateway mode, use the protected console or `--online` with `N8N_CODEX_ADMIN_URL` and `N8N_CODEX_ADMIN_TOKEN_FILE`. These operations run through the existing gateway owner. Do not mount its profile store or key into n8n or a second helper.
-
-### Manual import and reconnect
-
-During the same stopped-owner maintenance window, the same one-off helper accepts `import --format token-set|codex-auth-json --input <protected-file|-> --label <name> --binding-output <new-file>`. Input files must be readable inside the container. Stdin avoids copying them into an image. Never put tokens in command-line arguments.
-
-Use the same one-off service command with `device-login --offline --label 'Automation' --reconnect /home/node/.n8n/codex-wire/bindings/automation.json` to preserve profile identity and binding. The helper does not discover a home-directory login, modify a source auth file or import Platform API keys. A refresh token alone is insufficient.
-
-The encrypted store-wide journal owns each exact rotating token across manual, device and prepared imports, reconnects and renewals. Independent login families for the same verified account are legal and share account admission limits. A renewable profile must exclusively own its rotating refresh token. Do not import a session another client will continue renewing. For access-only profiles, omit renewable material and reconnect when the current token expires.
-
-`status --binding <file>` and `doctor --binding <file>` are local and never renew. Credential Test and Check Account are local as well. Network actions, model pickers and inference follow normal managed renewal. `N8N_CODEX_REFRESH_ENABLED=false` disables renewal. Public [Sign in with ChatGPT](https://developers.openai.com/siwc/token-sharing-open-source/preview-limitations) uses a different registration, consent and API contract; its tokens are not interchangeable here.
-
-### Recover a captured successful renewal
-
-After draining and stopping the embedded owner, run the same one-off helper with `recover --offline --binding <protected-binding-file>`. Recovery verifies the captured replacement's identity and commits it locally; it never sends another refresh POST. Public identity-verification keys may need to be fetched. A successful verified response that omitted a refresh token, or explicitly returned the same one, advances a new same-owner renewal epoch only after the durable commit.
-
-A lost response, failed capture, malformed response, identity mismatch or conflicting profile cannot be guessed or replayed. Preserve the encrypted journal and use an independent login when recovery cannot prove the replacement. Manual import never writes back to the source auth file. See [upgrade and rollback](upgrade.md) before moving the store.
-
-## Build from source
-
-Use Node.js `26.12.1` and Docker with Compose. From a checkout:
-
-```sh
-CODEX_RELEASE_SECURITY_BUNDLE=/absolute/prepared-build/security \
-  CODEX_RELEASE_DOCKER=direct npm run release:local
-```
-
-This command builds the **legacy CUSTOM embedded image** from the root `Dockerfile.n8n`, conventionally tagged `codex-wire-n8n:0.1.0`. It contains the four native nodes and security layer. Its release manifest identifies `legacy-custom-embedded`; it does not install the 17-file standalone Agents lifecycle overlay. Use the separately built companion below for an Agents account pool.
-
-First prepare the exact source/dependency/security bundle with the [bounded companion build](gateway.md#reproducible-companion-assembly). `CODEX_RELEASE_SECURITY_BUNDLE` is mandatory: the release command verifies its source hashes, lock, compiled outputs and signed OS inputs before Docker work. The build installs pinned dependencies inside Docker, runs tests and native smoke checks, writes artifacts and checks startup on empty volumes. Without `CODEX_RELEASE_DOCKER=direct`, it uses `sudo -n docker`. It does not publish or update an existing deployment. A different image already using a public release tag is preserved.
-
-To load an existing platform-specific image archive (Linux amd64 is the verified target):
-
-```sh
-(cd artifacts && sha256sum --check SHA256SUMS)
-docker load --input artifacts/codex-wire-n8n-0.1.0.tar
-```
-
-The source-built image already includes the package and uses this helper location:
-
-```text
-/opt/n8n-codex/node_modules/.bin/n8n-codex-account
-```
-
-For a new bundled-image installation, provision the key through a narrow writable secrets-directory mount, then start the supplied Compose:
-
-```sh
-mkdir -p secrets
-chmod 0700 secrets
-docker run --rm --user "$(id -u):$(id -g)" \
-  --mount "type=bind,src=$PWD/secrets,dst=/run/codex-secrets" \
-  --entrypoint /opt/n8n-codex/node_modules/.bin/n8n-codex-account \
-  codex-wire-n8n:0.1.0 \
-  keygen --output /run/codex-secrets/runtime.env
-docker compose -f compose.portable.yaml up -d
-```
-
-That image stores profiles at `/var/lib/n8n-codex/profiles` and bindings under `/var/lib/n8n-codex/bindings`; adapt account-login commands to those paths. For existing data, follow [upgrade and rollback](upgrade.md) and reuse the original key, bindings and volumes.
-
-The **matched Agents companion** comes from `integration/qualification/Dockerfile.n8n` (emitted as `n8n.Dockerfile` by the bounded build). It includes the lifecycle and security overlays, keeps `N8N_CUSTOM_EXTENSIONS` empty, and initially loads no Codex community nodes. Install the same tarball through the community loader to add the four native nodes with the npm namespace. Its installed helper is then under the actual n8n community directory, normally `/home/node/.n8n/nodes/node_modules/n8n-nodes-codex-chat/dist/cli.js`; `/opt/n8n-codex/node_modules/.bin/n8n-codex-account` belongs to the legacy embedded image. Use the exact companion image ID and variant in its release receipt; an image tag alone does not establish which recipe it contains.
-
-## Namespaces
-
-Examples use `n8n-nodes-codex-chat.<node-name>` for npm installations, including community installation on the matched Agents companion, and can be imported directly after assigning credentials. The legacy CUSTOM embedded image uses `CUSTOM.<node-name>`. Existing workflow types never change automatically.
-
-To use an example with the custom image, convert it from a source checkout:
-
-```sh
-mkdir -p artifacts
-node examples/convert-namespaces.cjs \
-  examples/basic-chat.json artifacts/basic-chat-custom.json custom
-```
-
-The converter changes only the four exact Codex Wire type identifiers, including nested examples, and refuses to overwrite its input. Do not bulk-convert existing workflows. The image example's optional Workflow Tool returns metadata; its Webhook branch delivers image bytes.
+The separate Agents builder, full standalone pooling and automatic native OpenAI-credential creation are unsupported on stock n8n. Use a native workflow AI Agent, optionally exposed through Chat Hub. See [support boundaries](../README.md#support-boundaries).
 
 By [wufflyne](https://wufflyne.com).
+
+For structured results in an ordinary workflow, attach **Codex Output Parser** and enter an object JSON Schema. The private Chat route uses one fixed model with optional memory; keep tools, parsers, routing and additional output nodes in ordinary workflows. See [model and parser scope](models.md#tools-and-structured-output).

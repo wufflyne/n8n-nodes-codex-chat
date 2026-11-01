@@ -25,6 +25,7 @@ export interface AuthProvider {
   verify(tokens: TokenSet, allowExpired?: boolean): Promise<VerifiedTokens>;
   refresh(tokens: TokenSet, capture?: (bytes: Buffer) => Promise<void>): Promise<TokenSet>;
 }
+export interface DeviceGrant { deviceId: string; userCode: string; expiresAt: number; interval: number }
 
 const AUTH_METADATA = "https://api.openai.com/auth";
 
@@ -36,6 +37,46 @@ export class CodexAuthProvider implements AuthProvider {
     }).createRemoteJWKSet
   >;
   constructor(private readonly fetchImpl: Fetch = fetch) {}
+
+  private async devicePost(endpoint: string, body: Record<string, string>, form = false) {
+    const scope = requestScope([], 30000);
+    try {
+      const response = await this.fetchImpl(`${ISSUER}${endpoint}`, {
+        method: "POST", redirect: "error", signal: scope.signal,
+        headers: { "Content-Type": form ? "application/x-www-form-urlencoded" : "application/json" },
+        body: form ? new URLSearchParams(body).toString() : JSON.stringify(body),
+      });
+      const bytes = await readBytes(response, 256 * 1024, scope.signal);
+      return { status: response.status, ok: response.ok, bytes };
+    } catch { throw new CodexError("authentication", "The device sign-in request has an unknown outcome. Use an independent Reconnect; this request will not be repeated."); }
+    finally { scope.close(); }
+  }
+  async startDevice(): Promise<DeviceGrant> {
+    const response = await this.devicePost("/api/accounts/deviceauth/usercode", { client_id: CODEX_CLIENT_ID });
+    assert(response.ok, "Device-code login was rejected. Enable device code login in ChatGPT security settings or ask your workspace administrator, then use Reconnect.");
+    let p: Record<string, unknown>;
+    try { p = record(JSON.parse(response.bytes.toString("utf8"))); } catch { throw new CodexError("protocol", "The device service returned an invalid response. Use Reconnect."); }
+    const userCode = string(p.user_code ?? p.usercode, "One-time code", 64);
+    assert(/^[A-Za-z0-9_-]{1,64}$/.test(userCode), "The device service returned an invalid one-time code.");
+    const seconds = Number(p.interval ?? 5), lifetime = Number(p.expires_in ?? 900);
+    assert(Number.isFinite(seconds) && seconds >= 0 && seconds <= 900 && Number.isFinite(lifetime) && lifetime > 0 && lifetime <= 900, "The device service returned invalid timing metadata.");
+    return { deviceId: string(p.device_auth_id, "Device authorization identifier"), userCode, interval: Math.max(1, seconds) * 1000, expiresAt: Date.now() + lifetime * 1000 };
+  }
+  async pollDevice(grant: Pick<DeviceGrant, "deviceId" | "userCode">) {
+    const r = await this.devicePost("/api/accounts/deviceauth/token", { device_auth_id: grant.deviceId, user_code: grant.userCode });
+    if ([403, 404].includes(r.status)) return undefined;
+    assert(r.ok, "Device authorization was rejected. Use Reconnect with an independent sign-in.");
+    let p: Record<string, unknown>;
+    try { p = record(JSON.parse(r.bytes.toString("utf8"))); } catch { throw new CodexError("protocol", "The device authorization response is invalid. Use Reconnect."); }
+    return { code: string(p.authorization_code, "Authorization code"), verifier: string(p.code_verifier, "PKCE verifier") };
+  }
+  async exchangeDevice(code: { code: string; verifier: string }, capture: (bytes: Buffer) => Promise<void>) {
+    const r = await this.devicePost("/oauth/token", { grant_type: "authorization_code", client_id: CODEX_CLIENT_ID, code: code.code, code_verifier: code.verifier, redirect_uri: `${ISSUER}/deviceauth/callback` }, true);
+    assert(r.ok, "The device token exchange was rejected. Use an independent Reconnect.");
+    await capture(r.bytes);
+    try { return tokenResponse(JSON.parse(r.bytes.toString("utf8"))); }
+    catch { throw new CodexError("protocol", "The successful device response was captured but could not be parsed. Preserve it and use independent Reconnect."); }
+  }
 
   async verify(
     tokens: TokenSet,

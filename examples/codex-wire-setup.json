@@ -1,0 +1,21 @@
+{
+  "name": "Codex Wire Setup",
+  "active": false,
+  "nodes": [
+    {
+      "id": "codex-wire-service",
+      "name": "Codex Wire Service",
+      "type": "n8n-nodes-codex-chat.codexWireService",
+      "typeVersion": 1,
+      "position": [
+        300,
+        300
+      ],
+      "parameters": {}
+    }
+  ],
+  "connections": {},
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

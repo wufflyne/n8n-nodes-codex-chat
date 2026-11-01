@@ -4,7 +4,7 @@ Codex Wire performs one model generation per invocation. n8n owns the Agent loop
 
 ## Catalog and settings
 
-The authenticated account catalog determines available model IDs and known capabilities. The picker caches results for up to five minutes; **Codex Account → Get Models** forces a refresh. New IDs appear automatically when the catalog supplies a supported route discriminator. Unknown protocols or modalities require a code update. Existing workflows retain their selected model.
+The authenticated account catalog determines available model IDs and known capabilities. The picker caches results for up to five minutes; **Codex Account → Refresh Models** forces a refresh. New IDs appear automatically when the catalog supplies a supported route discriminator. Unknown protocols or modalities require a code update. Existing workflows retain their selected model.
 
 **Provider Default (No Override)** omits a field. An **Advertised Default** is catalog metadata, not proof of the server's hidden effective choice. Reasoning, verbosity, speed and other optional controls are validated against the selected model. No automatic model, effort, verbosity or image-quality downgrade is performed.
 
@@ -14,9 +14,21 @@ Standard Responses and Responses Lite are selected only by the known authenticat
 
 Use native n8n tools with the AI Agent. Tool names, schema snapshots, provider IDs and tool results are validated through each turn. Accepted or ambiguous generations are not retried automatically. Incomplete or inconsistent tool history fails before dispatch.
 
-Native output parsers remain n8n-owned. A parser configured to repair output may invoke the model again. For direct library use, `withStructuredOutput` supports automatic `functionCalling` and explicit `jsonSchema` with local Ajv/Zod validation. `includeRaw` returns JavaScript `{raw, parsed}`; a parse failure yields `parsed: null` without an adapter repair generation.
+For structured results in an ordinary workflow, attach **Codex Output Parser** to a native AI Agent or Basic LLM Chain. Enter an object JSON Schema in its normal field. The parser preserves your strict schema, returns validated data, and stops on invalid output. It makes no repair call and does not convert the schema through the host's Zod parser. Nested arrays and objects are supported within finite byte, depth and property-count bounds. Expressions are evaluated by the parser in its own native context; standard sub-node first-item behavior applies.
+
+The stock Structured Output Parser and Information Extractor remain host-dependent integrations. The pinned Zod version can exhaust memory while accumulating errors for a large invalid collection; those host parsers are not qualified for untrusted model output here. Use Codex Output Parser instead. Information Extractor also owns an output-repair call; an explicit native auto-fixing wrapper may independently request another generation. Installing this package does not patch those host classes.
+
+For direct library use, `withStructuredOutput` supports `functionCalling` and explicit `jsonSchema` with an exact local output contract. `includeRaw` returns JavaScript `{raw, parsed}`; a parse failure yields `parsed: null` without an adapter repair generation.
+
+Sparse-array results from a caller's Zod parser are rejected. Older Zod v4 async-tuple parsing can produce such results; use plain JSON Schema or a compatible parser for that case. Result inspection is bounded to depth 64 and 65,536 properties/array slots and preserves ordinary Zod transformations.
 
 In the pinned n8n Agent V3, Code Tool can receive host-added call metadata such as `toolCallId`. A manual schema with `additionalProperties: false` can therefore reject that tool input even when the enclosing Agent finishes. Declare the metadata your tool accepts, or allow additional properties when that matches the tool's contract, and check the actual tool result. Codex Wire does not alter a user schema to bypass this validation.
+
+## Chat in n8n
+
+The private Chat Hub workflow route supports Chat Trigger connected directly to one native AI Agent, one fixed Codex Chat Model and optional native memory. Tools, attached output parsers, Router/Fallback and additional main output nodes are refused before provider effects. Ordinary workflows retain their tools, structured output, memory and Router support.
+
+New Codex assistant text is checked before every streamed fragment, callback and final tail reaches the host renderer. Limits are 262,144 UTF-16 text units, 1,024 ASCII quote characters and a cumulative rendering-work budget. A response over a limit stops with a controlled error; its unsafe fragment is never delivered, truncated or rewritten. A safe prefix may already be visible. If Chat shows a generic workflow error, open the workflow’s execution to inspect the controlled cause. Large non-Chat replies retain their existing bounds. These controls cover this supported Codex Chat route, not other providers, old stored messages or arbitrary host tool output.
 
 ## Photo inputs
 
@@ -26,7 +38,7 @@ Direct PDF/files/audio/video, embeddings, realtime/background threads and hosted
 
 ## Memory and account choice
 
-For a conversation with memory, select an account **before** the Agent using Get Limits → native Model Selector. Include the selected account alias in the Simple Memory session key. This is preselection; quota may change between the read and inference.
+For a conversation with memory, select an account **before** the Agent using Refresh Limits → native Model Selector. Include the selected account alias in the Simple Memory session key. This is preselection; quota may change between the read and inference.
 
 Memory nodes determine which message metadata survives. Stock Agent V3 reconstructs split tool-call messages with blank visible text; Codex Wire restores their original provider group once, including its text, phase and retained opaque reasoning. Matching nonempty split text also remains valid after serialization; conflicting text is rejected. Stock Simple Memory constructs the final assistant message from its visible string and does not retain that final message's provider metadata. Codex Wire preserves eligible metadata that actually survives; it does not invent missing final reasoning or restore history outside the supplied memory window.
 

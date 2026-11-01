@@ -15,25 +15,24 @@ import {
   type SupplyData,
 } from "n8n-workflow";
 import { serviceModel } from "../../adapters/langchain/service-model.js";
-import { nativeService } from "../../service/native.js";
+import { nativeAccount } from "../../service/native-connections.js";
+import { editorModels, credentialLocalStatus } from "../../service/native-local.js";
 import { nativeContext } from "../../n8n/context.js";
+import { nativeChatOutputPolicy } from "../../n8n/chat-output-policy.js";
 import { CodexTracing } from "../../n8n/tracing.js";
 import { promptCacheProperty, recoveryProperty, recoveryPolicy } from "../../n8n/options.js";
 import type { AffinityPolicy } from "../../core/affinity.js";
 import { ReplayLedger } from "../../core/replay.js";
 import { assert } from "../../core/errors.js";
-import { credentialBinding } from "../../runtime.js";
 import { safeError } from "../../core/errors.js";
 import type { ModelSettings } from "../../core/types.js";
 
 const executionReplays = new Map<string, ReplayLedger>();
 
 async function selectedModel(ctx: ILoadOptionsFunctions) {
-  const binding = credentialBinding(await ctx.getCredentials("codexAccount"));
-  const service = nativeService();
   const parameter = ctx.getNodeParameter("model", "") as { value?: string } | string;
   const slug = typeof parameter === "string" ? parameter : (parameter.value ?? "");
-  return (await service.resolve(binding, slug)).model;
+  return (await editorModels(ctx)).find(m => m.slug === slug);
 }
 
 const reliability: INodeProperties = {
@@ -115,7 +114,7 @@ export class CodexChatModel implements INodeType {
         default: { mode: "list", value: "" },
         required: true,
         description:
-          "Choose from this account's catalog. Inference access is checked when the workflow runs. Picker data is cached up to five minutes; use Codex Account → Get Models to refresh.",
+          "Local cached catalog only. Run Codex Account → Refresh Models to populate or refresh this list. By ID remains available; execution checks exact catalog membership and inference access.",
         modes: [
           {
             displayName: "From List",
@@ -209,9 +208,7 @@ export class CodexChatModel implements INodeType {
         this: ILoadOptionsFunctions,
         filter?: string,
       ): Promise<INodeListSearchResult> {
-        const models = await nativeService().models(
-          credentialBinding(await this.getCredentials("codexAccount")),
-        );
+        const models = await editorModels(this);
         return {
           results: models
             .filter(
@@ -239,7 +236,7 @@ export class CodexChatModel implements INodeType {
       async reasoningEfforts(this: ILoadOptionsFunctions): Promise<INodePropertyOptions[]> {
         return [
           { name: "Provider Default (No Override)", value: "" },
-          ...(await selectedModel(this)).reasoningEfforts.map((e) => ({
+          ...((await selectedModel(this))?.reasoningEfforts ?? []).map((e) => ({
             name: e[0]!.toUpperCase() + e.slice(1),
             value: e,
           })),
@@ -248,7 +245,7 @@ export class CodexChatModel implements INodeType {
       async reasoningSummaries(this: ILoadOptionsFunctions): Promise<INodePropertyOptions[]> {
         return [
           { name: "Provider Default (No Override)", value: "" },
-          ...((await selectedModel(this)).supportsSummary
+          ...((await selectedModel(this))?.supportsSummary
             ? ["auto", "concise", "detailed"].map((s) => ({
                 name: s[0]!.toUpperCase() + s.slice(1),
                 value: s,
@@ -259,7 +256,7 @@ export class CodexChatModel implements INodeType {
       async serviceTiers(this: ILoadOptionsFunctions): Promise<INodePropertyOptions[]> {
         return [
           { name: "Account Default (No Override)", value: "" },
-          ...(await selectedModel(this)).serviceTiers.map((t) => ({
+          ...((await selectedModel(this))?.serviceTiers ?? []).map((t) => ({
             name: t.name,
             value: t.id,
           })),
@@ -268,7 +265,7 @@ export class CodexChatModel implements INodeType {
       async verbosityLevels(this: ILoadOptionsFunctions): Promise<INodePropertyOptions[]> {
         return [
           { name: "Provider Default (No Override)", value: "" },
-          ...((await selectedModel(this)).supportsVerbosity
+          ...((await selectedModel(this))?.supportsVerbosity
             ? ["low", "medium", "high"].map((s) => ({
                 name: s[0]!.toUpperCase() + s.slice(1),
                 value: s,
@@ -283,17 +280,17 @@ export class CodexChatModel implements INodeType {
         credential: ICredentialsDecrypted<ICredentialDataDecryptedObject>,
       ): Promise<INodeCredentialTestResult> {
         try {
-          const status = await nativeService().status(credentialBinding(credential.data));
+          const status = await credentialLocalStatus(credential.id, credential.data!);
           if (status.account.state === "expired" && status.account.renewal !== "enabled")
             return {
               status: "Error",
               message:
-                "This session has expired and automatic renewal is unavailable. Reconnect this profile with the account helper.",
+                "This session has expired and automatic renewal is unavailable. Use Codex Account → Reconnect; configured legacy installations retain their existing recovery path.",
             };
           if (["reconnect_required", "refresh_uncertain"].includes(status.account.state))
             return {
               status: "Error",
-              message: "This profile requires reconnection with the account helper.",
+              message: "This profile requires reconnection. Use Codex Account → Reconnect with its original Manager; configured legacy installations retain their existing recovery path.",
             };
           const renewal =
             status.account.renewal === "disabled_by_instance"
@@ -314,8 +311,8 @@ export class CodexChatModel implements INodeType {
 
   async supplyData(this: ISupplyDataFunctions, itemIndex: number): Promise<SupplyData> {
     try {
-      const binding = credentialBinding(await this.getCredentials("codexAccount"));
-      const service = nativeService();
+      const nativeChatOutput = nativeChatOutputPolicy(this);
+      const { binding, service } = await nativeAccount(this);
       const context = nativeContext(this);
       assert(
         this.onExecutionFinish,
@@ -374,6 +371,7 @@ export class CodexChatModel implements INodeType {
         conversationKey?: string;
       };
       const chat = serviceModel(service, binding, {
+        nativeChatOutput,
         model,
         settings,
         replay,

@@ -1,0 +1,110 @@
+{
+  "name": "Codex Wire \u2014 Chat",
+  "active": false,
+  "nodes": [
+    {
+      "id": "chat",
+      "name": "Chat Trigger",
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.5,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "public": false,
+        "availableInChat": true,
+        "agentName": "Codex Wire",
+        "agentDescription": "Chat with your connected Codex account. By wufflyne.com.",
+        "options": {
+          "responseMode": "streaming"
+        }
+      }
+    },
+    {
+      "id": "agent",
+      "name": "AI Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3,
+      "position": [
+        300,
+        0
+      ],
+      "parameters": {
+        "promptType": "auto",
+        "options": {
+          "enableStreaming": true
+        }
+      }
+    },
+    {
+      "id": "model",
+      "name": "Codex Chat Model",
+      "type": "n8n-nodes-codex-chat.codexChatModel",
+      "typeVersion": 1,
+      "position": [
+        220,
+        240
+      ],
+      "parameters": {
+        "model": {
+          "mode": "id",
+          "value": "SELECT_FROM_YOUR_ACCOUNT_CATALOG"
+        }
+      }
+    },
+    {
+      "id": "memory",
+      "name": "Conversation Memory",
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        440,
+        240
+      ],
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ 'codex-account-1:' + $json.sessionId }}",
+        "contextWindowLength": 10
+      }
+    }
+  ],
+  "connections": {
+    "Chat Trigger": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Codex Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Conversation Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

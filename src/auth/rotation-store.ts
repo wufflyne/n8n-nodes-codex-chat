@@ -40,9 +40,15 @@ export class RotationStore {
     try { await lstat(path.join(this.store.directory, `.import-${digest}.used`)); return true; }
     catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return false; throw error; }
   }
-  private async locked<T>(action: (journal: Journal) => Promise<T>, write = true): Promise<T> {
+  private async locked<T>(action: (journal: Journal) => Promise<T>, write = true, beforeCommit?: () => Promise<void>): Promise<T> {
     assert(!this.store.readOnly, "This profile store is open for local read-only diagnostics.");
     await this.store.ready();
+    if (this.store.ownerLock) return this.store.ownerLock("rotation", async () => {
+      const journal = await this.load();
+      const result = await action(journal);
+      if (write) await this.save(journal, beforeCommit);
+      return result;
+    });
     const lock = path.join(this.store.directory, ".rotation-v2.lock"), deadline = Date.now() + 30000;
     while (true) {
       try { await mkdir(lock, { mode: 0o700 }); break; }
@@ -55,7 +61,7 @@ export class RotationStore {
     try {
       const journal = await this.load();
       const result = await action(journal);
-      if (write) await this.save(journal);
+      if (write) await this.save(journal, beforeCommit);
       return result;
     } catch (error) {
       if (error instanceof CodexError) throw error;
@@ -119,8 +125,11 @@ export class RotationStore {
       assert(bytes <= ROTATION_LIMITS.bytes, "The token safety journal payload limit has been reached. No new renewal is authorized; preserve any pending recovery material.");
     }
   }
-  private async save(journal: Journal) {
+  private async save(journal: Journal, beforeCommit?: () => Promise<void>) {
     this.bounded(journal);
+    // Optional native admission receipt is local and durable before the first journal write.
+    // All identity/family/tombstone/capacity checks have passed under the original locks.
+    await beforeCommit?.();
     await writeJournal(this.filename, this.key, journalChunks(journal));
     this.readyCache.clear();
   }
@@ -154,7 +163,7 @@ export class RotationStore {
     // This cache authorizes only the current access session. Every dispatch and mutation reloads under lock.
   }
   /** The ownership reservation precedes the profile write; a failed registration remains fenced. */
-  async register(profile: Profile, previous?: Profile) {
+  async register(profile: Profile, previous?: Profile, beforeCommit?: () => Promise<void>) {
     profile = structuredClone(profile);
     previous = previous && structuredClone(previous);
     await this.locked(async (j) => {
@@ -172,7 +181,7 @@ export class RotationStore {
       }
       assert(!j.registrations[profile.id], "A prior account registration must be recovered before reconnecting.");
       j.registrations[profile.id] = profile;
-    });
+    }, true, beforeCommit);
     await this.finishRegistration(profile.id);
   }
   private async finishRegistration(id: string) {
@@ -214,7 +223,7 @@ export class RotationStore {
     return id;
   }
   /** Bootstrap owns candidate material without replacing an unrelated working token family. */
-  async beginBootstrap(candidate: Profile, previous?: Profile): Promise<string> {
+  async beginBootstrap(candidate: Profile, previous?: Profile, beforeCommit?: () => Promise<void>): Promise<string> {
     candidate = structuredClone(candidate);
     previous = previous && structuredClone(previous);
     const id = randomUUID(), token = candidate.tokens.refreshToken;
@@ -235,7 +244,7 @@ export class RotationStore {
       epoch.state = "dispatching";
       // This is the durable profile intent for an initial import; its protected binding was delivered first.
       j.receipts[id] = { id, digest, epoch: epoch.id, before: candidate, bootstrap: true, ...(previous ? { previous } : {}) };
-    });
+    }, true, beforeCommit);
     if (previous?.tokens.refreshToken === token)
       await this.store.write({ ...previous, state: "refresh_uncertain" });
     return id;

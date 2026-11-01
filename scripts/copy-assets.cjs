@@ -1,5 +1,5 @@
 const fs = require("node:fs");
-for (const name of ["CodexChatModel", "CodexAccount", "CodexAccountRouter", "CodexImage"])
+for (const name of ["CodexChatModel", "CodexAccount", "CodexAccountRouter", "CodexImage", "CodexWireService", "CodexOutputParser"])
   fs.copyFileSync(`src/nodes/${name}/codex.svg`, `dist/nodes/${name}/codex.svg`);
 fs.cpSync("src/gateway/console", "dist/gateway/console", { recursive: true });
 const crypto = require("node:crypto");

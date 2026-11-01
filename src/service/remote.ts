@@ -1,9 +1,10 @@
-import { randomUUID } from "node:crypto";
+import { randomUUID, createHash } from "node:crypto";
 import { readPrivateFile } from "../auth/store.js";
 import { CodexError } from "../core/errors.js";
 import { sseEvents } from "../core/sse.js";
 import type { CodexService, NativeGeneration, RpcEnvelope } from "./contracts.js";
-import type { Binding } from "../core/types.js";
+import type { Binding, ModelInfo } from "../core/types.js";
+import type { AccountSnapshot } from "../account/types.js";
 import type { ExecutionContext } from "../core/affinity.js";
 import type { TransportEvent } from "../core/transport.js";
 import { AdmissionRejection } from "../core/transport.js";
@@ -11,6 +12,38 @@ import { AdmissionRejection } from "../core/transport.js";
 export class RemoteService implements CodexService {
   private token?: Promise<string>;
   private handshake?: Promise<void>;
+  private readonly snapshots = new Map<
+    string,
+    {
+      models?: { until: number; values: ModelInfo[] };
+      limits?: { until: number; value: AccountSnapshot };
+    }
+  >();
+  private snapshotKey(binding: Binding) {
+    return createHash("sha256")
+      .update(binding.profileId)
+      .update("\0")
+      .update(binding.bindingSecret)
+      .digest("hex");
+  }
+  private snapshot(binding: Binding) {
+    const key = this.snapshotKey(binding);
+    let value = this.snapshots.get(key);
+    if (!value) {
+      if (this.snapshots.size >= 128) this.snapshots.delete(this.snapshots.keys().next().value!);
+      value = {};
+      this.snapshots.set(key, value);
+    }
+    return value;
+  }
+  cachedModels(binding: Binding): ModelInfo[] {
+    const cached = this.snapshots.get(this.snapshotKey(binding))?.models;
+    return cached && cached.until > Date.now() ? structuredClone(cached.values) : [];
+  }
+  cachedLimits(binding: Binding): AccountSnapshot | undefined {
+    const cached = this.snapshots.get(this.snapshotKey(binding))?.limits;
+    return cached && cached.until > Date.now() ? structuredClone(cached.value) : undefined;
+  }
   constructor(
     readonly origin: string,
     readonly tokenFile: string,
@@ -116,13 +149,15 @@ export class RemoteService implements CodexService {
   status(binding: Binding) {
     return this.call<Awaited<ReturnType<CodexService["status"]>>>("status", binding, {});
   }
-  models(binding: Binding, signal?: AbortSignal, force = false) {
-    return this.call<Awaited<ReturnType<CodexService["models"]>>>(
+  async models(binding: Binding, signal?: AbortSignal, force = false) {
+    const models = await this.call<Awaited<ReturnType<CodexService["models"]>>>(
       "models",
       binding,
       { force },
       signal,
     );
+    this.snapshot(binding).models = { until: Date.now() + 300000, values: structuredClone(models) };
+    return models;
   }
   resolve(binding: Binding, model: string, signal?: AbortSignal) {
     return this.call<Awaited<ReturnType<CodexService["resolve"]>>>(
@@ -141,20 +176,23 @@ export class RemoteService implements CodexService {
       context,
     );
   }
-  limits(binding: Binding, options: Parameters<CodexService["limits"]>[1]) {
+  async limits(binding: Binding, options: Parameters<CodexService["limits"]>[1]) {
     const { signal, ...params } = options ?? {};
-    return this.call<Awaited<ReturnType<CodexService["limits"]>>>(
+    const result = await this.call<Awaited<ReturnType<CodexService["limits"]>>>(
       "limits",
       binding,
       params,
       signal,
     );
+    this.snapshot(binding).limits = { until: Date.now() + 30000, value: structuredClone(result) };
+    return result;
   }
   reset(
     binding: Binding,
     options: Parameters<CodexService["reset"]>[1],
     context?: ExecutionContext,
   ) {
+    this.snapshots.delete(this.snapshotKey(binding));
     const { signal, ...params } = options;
     return this.call<Awaited<ReturnType<CodexService["reset"]>>>(
       "reset",
@@ -169,6 +207,7 @@ export class RemoteService implements CodexService {
     options: Parameters<CodexService["reconcile"]>[1],
     context?: ExecutionContext,
   ) {
+    this.snapshots.delete(this.snapshotKey(binding));
     const { signal, ...params } = options;
     return this.call<Awaited<ReturnType<CodexService["reconcile"]>>>(
       "reconcile",

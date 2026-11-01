@@ -85,7 +85,7 @@ test('Native n8n supplyData returns an actual bindable model and respects execut
     getCredentials: async () => binding,
     getNodeParameter: (key, _index, fallback) => key === 'model' ? 'synthetic-model' : fallback,
     getExecutionCancelSignal: () => controller.signal,
-    getNode: () => ({ id: 'synthetic-node', name: 'Synthetic native node' }),
+    getChatTrigger: () => null, getNode: () => ({ id: 'synthetic-node', name: 'Synthetic native node' }),
     getInstanceId: () => 'synthetic-instance', getWorkflow: () => ({id:'synthetic-workflow'}), addInputData: () => ({index:0}), addOutputData: () => {}, getExecutionId: () => 'synthetic-execution', onExecutionFinish: callback => t.after(callback), onExecutionCancellation: () => {},
   }, 0);
   assert(supplied.response instanceof CodexChatModel);
